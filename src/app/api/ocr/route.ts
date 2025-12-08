@@ -26,7 +26,7 @@ interface FrameOCRResult {
     error?: string;
 }
 
-const VISION_MODEL = 'llama-3.2-90b-vision-preview';
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 const OCR_PROMPT = `Analyze this image and extract all visible text. For each piece of text found, provide:
 1. The exact text content
