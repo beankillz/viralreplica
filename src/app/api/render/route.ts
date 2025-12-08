@@ -47,8 +47,8 @@ function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null):
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
 
-        // Only include fontfile if font path exists
-        const fontParam = fontPath ? `fontfile='${fontPath}':` : '';
+        // Only include fontfile if font path exists (no quotes needed for simple paths)
+        const fontParam = fontPath ? `fontfile=${fontPath}:` : '';
         return `drawtext=${fontParam}text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
     });
 }
