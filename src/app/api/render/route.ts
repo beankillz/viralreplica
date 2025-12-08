@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
                     '-c:v', 'libx264',
                     '-preset', 'ultrafast', // Use ultrafast for speed/lower mem
                     '-c:a', 'copy',
+                    '-threads', '1',        // Limit threads to prevent OOM/SIGKILL on constrained envs
+                    '-max_muxing_queue_size', '1024',
                     '-y'
                 ])
                 .output(outputPath)
