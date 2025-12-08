@@ -91,15 +91,27 @@ export async function POST(request: NextRequest) {
         const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
         await writeFile(inputPath, videoBuffer);
 
-        // Resolve font path
-        const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf').replace(/\\/g, '/');
-        const fontExists = require('fs').existsSync(fontPath);
-        console.log('Font path:', fontPath);
-        console.log('Font exists:', fontExists);
+        // Resolve source font path
+        const sourceFontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf');
+        // Destination font path in temp dir
+        const localFontPath = path.join(workDir, 'font.ttf').replace(/\\/g, '/');
 
-        // Build FFmpeg command - TEMPORARILY DISABLE CUSTOM FONT
-        // Pass null to use FFmpeg default font instead of custom font
-        const drawtextFilters = buildDrawtextFilters(overlays, null);
+        // Copy font to temp dir if it exists
+        let fontPathToUse: string | null = null;
+        try {
+            if (require('fs').existsSync(sourceFontPath)) {
+                await require('fs').promises.copyFile(sourceFontPath, localFontPath);
+                fontPathToUse = localFontPath;
+                console.log('Font copied to:', localFontPath);
+            } else {
+                console.log('Source font not found at:', sourceFontPath);
+            }
+        } catch (copyError) {
+            console.error('Failed to copy font:', copyError);
+        }
+
+        // Build FFmpeg command
+        const drawtextFilters = buildDrawtextFilters(overlays, fontPathToUse);
         console.log('Drawtext filters:', drawtextFilters);
 
         await new Promise<void>((resolve, reject) => {
