@@ -130,13 +130,6 @@ export default function Home() {
       // Step 5: Render video with text overlays
       updateProgress('rendering', 85, 'Rendering video with overlays...');
 
-      // Convert user video to base64 (browser-compatible)
-      const userVideoBase64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(userVideo);
-      });
-
       // Build overlays from OCR detections
       const overlays = ocrData.results.flatMap((frameResult: { frameIndex: number; timestamp?: number; detections: OCRDetection[] }) =>
         frameResult.detections.map((det: OCRDetection) => ({
@@ -154,14 +147,14 @@ export default function Home() {
         }))
       );
 
+      // Create FormData for minimal memory usage on client side
+      const renderFormData = new FormData();
+      renderFormData.append('video', userVideo);
+      renderFormData.append('overlays', JSON.stringify(overlays));
+
       const renderRes = await fetch('/api/render', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          videoBase64: userVideoBase64,
-          overlays,
-          outputFormat: 'mp4',
-        }),
+        body: renderFormData,
       });
 
       if (!renderRes.ok) {
@@ -170,8 +163,9 @@ export default function Home() {
         const userVideoUrl = URL.createObjectURL(userVideo);
         setOutputVideoUrl(userVideoUrl);
       } else {
-        const renderData = await renderRes.json();
-        setOutputVideoUrl(renderData.video);
+        const renderBlob = await renderRes.blob();
+        const renderUrl = URL.createObjectURL(renderBlob);
+        setOutputVideoUrl(renderUrl);
       }
 
       updateProgress('complete', 100, 'Processing complete!');

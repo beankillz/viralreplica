@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir, readFile, unlink } from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import os from 'os';
 import ffmpeg from 'fluent-ffmpeg';
@@ -10,8 +11,8 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 interface TextOverlay {
     text: string;
-    startTime: number;  // milliseconds
-    endTime: number;    // milliseconds
+    startTime: number;
+    endTime: number;
     style: {
         fontSize: string;
         color: string;
@@ -22,14 +23,7 @@ interface TextOverlay {
     };
 }
 
-interface RenderRequest {
-    videoBase64: string;
-    overlays: TextOverlay[];
-    outputFormat?: 'mp4' | 'webm';
-}
-
 function hexToFFmpegColor(hex: string): string {
-    // Convert hex color to FFmpeg format
     const clean = hex.replace('#', '');
     return clean.length === 6 ? clean : 'FFFFFF';
 }
@@ -39,15 +33,10 @@ function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
 
     return overlays.map((overlay) => {
         const { text, startTime, endTime, style } = overlay;
-
-        // Parse font size
         const fontSize = parseInt(style.fontSize) || 24;
-
-        // Convert times to seconds
         const start = startTime / 1000;
         const end = endTime / 1000;
 
-        // Escape special characters in text for FFmpeg
         const escapedText = text
             .replace(/\\/g, '\\\\\\\\')
             .replace(/'/g, "'\\\\\\''")
@@ -55,7 +44,6 @@ function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
             .replace(/\[/g, '\\[')
             .replace(/\]/g, '\\]');
 
-        // Position as percentage
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
 
@@ -64,29 +52,42 @@ function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
 }
 
 export async function POST(request: NextRequest) {
-    const workDir = path.join(os.tmpdir(), `viral-render-${Date.now()}`);
+    const timestamp = Date.now();
+    const workDir = path.join(os.tmpdir(), `viral-render-${timestamp}`);
+    const inputPath = path.join(workDir, 'input.mp4');
+    const outputPath = path.join(workDir, 'output.mp4');
 
     try {
-        const body: RenderRequest = await request.json();
-        const { videoBase64, overlays, outputFormat = 'mp4' } = body;
+        const formData = await request.formData();
+        const videoFile = formData.get('video') as File | null;
+        const overlaysJson = formData.get('overlays') as string | null;
 
-        if (!videoBase64) {
+        if (!videoFile || !overlaysJson) {
             return NextResponse.json(
-                { error: 'No video provided' },
+                { error: 'Missing video file or overlays' },
                 { status: 400 }
             );
         }
 
+        const overlays: TextOverlay[] = JSON.parse(overlaysJson);
+
         // Create work directory
         await mkdir(workDir, { recursive: true });
 
-        // Decode base64 video and save
-        const videoData = videoBase64.replace(/^data:video\/\w+;base64,/, '');
-        const videoBytes = Buffer.from(videoData, 'base64');
-        const inputPath = path.join(workDir, 'input.mp4');
-        const outputPath = path.join(workDir, `output.${outputFormat}`);
+        // Stream video file to disk instead of buffering entire file
+        const videoStream = videoFile.stream();
+        const reader = videoStream.getReader();
+        const FILE_generated_content = Buffer.alloc(0); // Not used, just placeholders
 
-        await writeFile(inputPath, videoBytes);
+        // Write file using standard node streams or buffer if small enough, 
+        // but for Next.js File objects, usually arrayBuffer() is safe for reasonable sizes.
+        // For true streaming we'd use pipe, but File interface gives arrayBuffer.e
+        // To be safe against OOM on input, we write the buffer.
+        // Note: request.formData() already consumed memory to parse the body. 
+        // For true streaming uploads, receiving straight to disk is preferred but complex in Next API routes.
+        // We'll proceed with arrayBuffer() for now as it's better than JSON+Base64.
+        const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
+        await writeFile(inputPath, videoBuffer);
 
         // Build FFmpeg command
         const drawtextFilters = buildDrawtextFilters(overlays);
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
             cmd
                 .outputOptions([
                     '-c:v', 'libx264',
-                    '-preset', 'fast',
+                    '-preset', 'ultrafast', // Use ultrafast for speed/lower mem
                     '-c:a', 'copy',
                     '-y'
                 ])
@@ -111,21 +112,23 @@ export async function POST(request: NextRequest) {
                 .run();
         });
 
-        // Read output video
-        const outputData = await readFile(outputPath);
-        const outputBase64 = outputData.toString('base64');
-        const mimeType = outputFormat === 'webm' ? 'video/webm' : 'video/mp4';
+        // Read the output file
+        const fileBuffer = await readFile(outputPath);
 
-        // Clean up
+        // Cleanup immediately
         await unlink(inputPath);
         await unlink(outputPath);
+        // Try to remove dir, ignore if not empty (though it should be)
+        // rmdir(workDir).catch(() => {}); 
 
-        return NextResponse.json({
-            success: true,
-            video: `data:${mimeType};base64,${outputBase64}`,
-            format: outputFormat,
-            overlayCount: overlays?.length || 0,
+        // Return output as a blob/file response
+        return new NextResponse(fileBuffer, {
+            headers: {
+                'Content-Type': 'video/mp4',
+                'Content-Disposition': `attachment; filename="rendered-${timestamp}.mp4"`,
+            },
         });
+
     } catch (error) {
         console.error('Render error:', error);
         return NextResponse.json(
