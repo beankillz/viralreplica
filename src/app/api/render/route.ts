@@ -97,8 +97,9 @@ export async function POST(request: NextRequest) {
         console.log('Font path:', fontPath);
         console.log('Font exists:', fontExists);
 
-        // Build FFmpeg command - pass null if font doesn't exist
-        const drawtextFilters = buildDrawtextFilters(overlays, fontExists ? fontPath : null);
+        // Build FFmpeg command - TEMPORARILY DISABLE CUSTOM FONT
+        // Pass null to use FFmpeg default font instead of custom font
+        const drawtextFilters = buildDrawtextFilters(overlays, null);
         console.log('Drawtext filters:', drawtextFilters);
 
         await new Promise<void>((resolve, reject) => {
