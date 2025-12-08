@@ -32,11 +32,15 @@ function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null):
     if (!overlays || overlays.length === 0) return [];
 
     // Escape path for FFmpeg filter syntax
+    // Escape path for FFmpeg filter syntax
     const escapeFontPath = (p: string): string => {
+        // When wrapping in single quotes for FFmpeg filter:
+        // 1. Convert backslashes to forward slashes (Windows compatibility)
+        // 2. Escape single quotes ( ' -> '\'' )
+        // 3. Do NOT escape colons (they are literal inside quotes)
         return p
-            .replace(/\\/g, '/')        // Convert backslashes to forward slashes
-            .replace(/:/g, '\\:')       // Escape colons
-            .replace(/'/g, "\\'");      // Escape single quotes
+            .replace(/\\/g, '/')
+            .replace(/'/g, "'\\\\''");
     };
 
     return overlays.map((overlay) => {
@@ -45,12 +49,13 @@ function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null):
         const start = startTime / 1000;
         const end = endTime / 1000;
 
+        // Escape text for FFmpeg filter (wrapped in single quotes)
         const escapedText = text
-            .replace(/\\/g, '\\\\\\\\')
-            .replace(/'/g, "'\\\\''")
-            .replace(/:/g, '\\:')
-            .replace(/\[/g, '\\[')
-            .replace(/\]/g, '\\]');
+            .replace(/\\/g, '\\\\\\\\') // Literal backslash needs escaping
+            .replace(/'/g, "'\\\\''")   // Single quote needs escaping
+            .replace(/\[/g, '\\[')      // Brackets might need escaping depending on context, safer to escape
+            .replace(/\]/g, '\\]')
+            .replace(/%/g, '\\%');       // Escape % to avoid expansion
 
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
