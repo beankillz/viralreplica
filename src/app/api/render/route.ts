@@ -31,6 +31,14 @@ function hexToFFmpegColor(hex: string): string {
 function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null): string[] {
     if (!overlays || overlays.length === 0) return [];
 
+    // Escape path for FFmpeg filter syntax
+    const escapeFontPath = (p: string): string => {
+        return p
+            .replace(/\\/g, '/')        // Convert backslashes to forward slashes
+            .replace(/:/g, '\\:')       // Escape colons
+            .replace(/'/g, "\\'");      // Escape single quotes
+    };
+
     return overlays.map((overlay) => {
         const { text, startTime, endTime, style } = overlay;
         const fontSize = parseInt(style.fontSize) || 24;
@@ -47,8 +55,8 @@ function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null):
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
 
-        // Only include fontfile if font path exists (no quotes needed for simple paths)
-        const fontParam = fontPath ? `fontfile=${fontPath}:` : '';
+        // Use escaped font path with single quotes
+        const fontParam = fontPath ? `fontfile='${escapeFontPath(fontPath)}':` : '';
         return `drawtext=${fontParam}text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
     });
 }
