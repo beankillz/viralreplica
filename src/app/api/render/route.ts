@@ -93,22 +93,37 @@ export async function POST(request: NextRequest) {
 
         // Resolve source font path
         const sourceFontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf');
-        // Destination font path in temp dir
-        const localFontPath = path.join(workDir, 'font.ttf').replace(/\\/g, '/');
+        // Destination font path in temp dir (use the same path format as inputPath)
+        const localFontPath = path.join(workDir, 'font.ttf');
+
+        console.log('=== FONT DEBUG ===');
+        console.log('Source font path:', sourceFontPath);
+        console.log('Local font path:', localFontPath);
+        console.log('workDir:', workDir);
 
         // Copy font to temp dir if it exists
         let fontPathToUse: string | null = null;
         try {
-            if (require('fs').existsSync(sourceFontPath)) {
+            const sourceExists = require('fs').existsSync(sourceFontPath);
+            console.log('Source font exists:', sourceExists);
+
+            if (sourceExists) {
                 await require('fs').promises.copyFile(sourceFontPath, localFontPath);
-                fontPathToUse = localFontPath;
-                console.log('Font copied to:', localFontPath);
+                const copyExists = require('fs').existsSync(localFontPath);
+                console.log('Font copied, copy exists:', copyExists);
+
+                if (copyExists) {
+                    // Use forward slashes for FFmpeg on all platforms
+                    fontPathToUse = localFontPath.replace(/\\/g, '/');
+                    console.log('fontPathToUse set to:', fontPathToUse);
+                }
             } else {
                 console.log('Source font not found at:', sourceFontPath);
             }
         } catch (copyError) {
             console.error('Failed to copy font:', copyError);
         }
+        console.log('=== END FONT DEBUG ===');
 
         // Build FFmpeg command
         const drawtextFilters = buildDrawtextFilters(overlays, fontPathToUse);
