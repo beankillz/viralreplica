@@ -89,8 +89,11 @@ export async function POST(request: NextRequest) {
         const videoBuffer = Buffer.from(await videoFile.arrayBuffer());
         await writeFile(inputPath, videoBuffer);
 
+        // Resolve font path
+        const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf').replace(/\\/g, '/');
+
         // Build FFmpeg command
-        const drawtextFilters = buildDrawtextFilters(overlays);
+        const drawtextFilters = buildDrawtextFilters(overlays, fontPath);
 
         await new Promise<void>((resolve, reject) => {
             let cmd = ffmpeg(inputPath);
