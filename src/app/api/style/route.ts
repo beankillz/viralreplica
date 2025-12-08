@@ -99,6 +99,46 @@ async function sampleColorsFromRegion(
         let width = clamp(Math.floor((boundingBox.width / 100) * metadata.width), 1, metadata.width - left);
         let height = clamp(Math.floor((boundingBox.height / 100) * metadata.height), 1, metadata.height - top);
 
+        // Helper to safely extract a region, handling edge cases and errors
+        const safeExtract = async (
+            img: sharp.Sharp,
+            opts: { left: number; top: number; width: number; height: number; },
+            fallbackColor: { r: number; g: number; b: number; }
+        ): Promise<Buffer> => {
+            try {
+                // Ensure absolute minimums
+                const extractOpts = {
+                    left: Math.max(0, opts.left),
+                    top: Math.max(0, opts.top),
+                    width: Math.max(1, opts.width),
+                    height: Math.max(1, opts.height)
+                };
+
+                // Last ditch safety check against image boundaries
+                if (extractOpts.left + extractOpts.width > metadata.width!) {
+                    extractOpts.width = metadata.width! - extractOpts.left;
+                }
+                if (extractOpts.top + extractOpts.height > metadata.height!) {
+                    extractOpts.height = metadata.height! - extractOpts.top;
+                }
+
+                if (extractOpts.width < 1 || extractOpts.height < 1) {
+                    throw new Error(`Invalid dimensions after safety check: w=${extractOpts.width}, h=${extractOpts.height}`);
+                }
+
+                return await img
+                    .clone() // Clone to avoid state contamination
+                    .extract(extractOpts)
+                    .resize(1, 1, { fit: 'cover' })
+                    .raw()
+                    .toBuffer();
+            } catch (err) {
+                console.warn(`Safe extract failed for rect [${opts.left},${opts.top},${opts.width},${opts.height}]: ${err}`);
+                // Return fallback color (1x1 pixel raw buffer)
+                return Buffer.from([fallbackColor.r, fallbackColor.g, fallbackColor.b]);
+            }
+        };
+
         // Extract the region with padding for background sampling
         const padX = Math.floor(width * 0.1);
         const padY = Math.floor(height * 0.2);
@@ -109,12 +149,11 @@ async function sampleColorsFromRegion(
         const bgWidth = clamp(width + padX * 2, 1, metadata.width - bgLeft);
         const bgHeight = clamp(height + padY * 2, 1, metadata.height - bgTop);
 
-        // Get average color of the region (background)
-        const regionBuffer = await image
-            .extract({ left: bgLeft, top: bgTop, width: bgWidth, height: bgHeight })
-            .resize(1, 1, { fit: 'cover' })
-            .raw()
-            .toBuffer();
+        const regionBuffer = await safeExtract(
+            image,
+            { left: bgLeft, top: bgTop, width: bgWidth, height: bgHeight },
+            { r: 0, g: 0, b: 0 } // Black fallback
+        );
 
         const bgColor: ColorSample = {
             r: regionBuffer[0],
@@ -128,16 +167,11 @@ async function sampleColorsFromRegion(
         const textWidth = clamp(Math.floor(width * 0.6), 1, metadata.width - textLeft);
         const textHeight = clamp(Math.floor(height * 0.4), 1, metadata.height - textTop);
 
-        const textBuffer = await image
-            .extract({
-                left: textLeft,
-                top: textTop,
-                width: textWidth,
-                height: textHeight
-            })
-            .resize(1, 1, { fit: 'cover' })
-            .raw()
-            .toBuffer();
+        const textBuffer = await safeExtract(
+            image,
+            { left: textLeft, top: textTop, width: textWidth, height: textHeight },
+            { r: 255, g: 255, b: 255 } // White fallback
+        );
 
         const textSample: ColorSample = {
             r: textBuffer[0],
