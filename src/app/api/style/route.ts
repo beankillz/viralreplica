@@ -90,21 +90,24 @@ async function sampleColorsFromRegion(
             return { textColor: '#FFFFFF', backgroundColor: 'rgba(0, 0, 0, 0.7)' };
         }
 
-        // Convert percentage to pixels
-        const left = Math.floor((boundingBox.x / 100) * metadata.width);
-        const top = Math.floor((boundingBox.y / 100) * metadata.height);
-        const width = Math.max(1, Math.floor((boundingBox.width / 100) * metadata.width));
-        const height = Math.max(1, Math.floor((boundingBox.height / 100) * metadata.height));
+        // Helper to clamp values
+        const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
+
+        // Convert percentage to pixels and clamp
+        let left = clamp(Math.floor((boundingBox.x / 100) * metadata.width), 0, metadata.width - 1);
+        let top = clamp(Math.floor((boundingBox.y / 100) * metadata.height), 0, metadata.height - 1);
+        let width = clamp(Math.floor((boundingBox.width / 100) * metadata.width), 1, metadata.width - left);
+        let height = clamp(Math.floor((boundingBox.height / 100) * metadata.height), 1, metadata.height - top);
 
         // Extract the region with padding for background sampling
         const padX = Math.floor(width * 0.1);
         const padY = Math.floor(height * 0.2);
 
         // Sample background (area around the text)
-        const bgLeft = Math.max(0, left - padX);
-        const bgTop = Math.max(0, top - padY);
-        const bgWidth = Math.min(width + padX * 2, metadata.width - bgLeft);
-        const bgHeight = Math.min(height + padY * 2, metadata.height - bgTop);
+        const bgLeft = clamp(left - padX, 0, metadata.width - 1);
+        const bgTop = clamp(top - padY, 0, metadata.height - 1);
+        const bgWidth = clamp(width + padX * 2, 1, metadata.width - bgLeft);
+        const bgHeight = clamp(height + padY * 2, 1, metadata.height - bgTop);
 
         // Get average color of the region (background)
         const regionBuffer = await image
@@ -120,17 +123,17 @@ async function sampleColorsFromRegion(
         };
 
         // Sample text region (center of bounding box)
-        const textLeft = Math.max(0, left + Math.floor(width * 0.2));
-        const textTop = Math.max(0, top + Math.floor(height * 0.3));
-        const textWidth = Math.max(1, Math.floor(width * 0.6));
-        const textHeight = Math.max(1, Math.floor(height * 0.4));
+        const textLeft = clamp(left + Math.floor(width * 0.2), 0, metadata.width - 1);
+        const textTop = clamp(top + Math.floor(height * 0.3), 0, metadata.height - 1);
+        const textWidth = clamp(Math.floor(width * 0.6), 1, metadata.width - textLeft);
+        const textHeight = clamp(Math.floor(height * 0.4), 1, metadata.height - textTop);
 
         const textBuffer = await image
             .extract({
-                left: Math.min(textLeft, metadata.width - 1),
-                top: Math.min(textTop, metadata.height - 1),
-                width: Math.min(textWidth, metadata.width - textLeft),
-                height: Math.min(textHeight, metadata.height - textTop)
+                left: textLeft,
+                top: textTop,
+                width: textWidth,
+                height: textHeight
             })
             .resize(1, 1, { fit: 'cover' })
             .raw()
@@ -142,14 +145,8 @@ async function sampleColorsFromRegion(
             b: textBuffer[2],
         };
 
-        // Determine if there's a background box or just video
-        const bgHex = rgbToHex(bgColor.r, bgColor.g, bgColor.b);
-        const textHex = rgbToHex(textSample.r, textSample.g, textSample.b);
-
-        // Check if background is relatively uniform (indicates a text overlay box)
         const bgLuminance = (0.299 * bgColor.r + 0.587 * bgColor.g + 0.114 * bgColor.b) / 255;
 
-        // If background is dark, assume dark overlay; if light, assume light overlay
         let backgroundColor: string;
         if (bgLuminance < 0.3) {
             backgroundColor = `rgba(0, 0, 0, 0.7)`;
@@ -159,7 +156,6 @@ async function sampleColorsFromRegion(
             backgroundColor = `rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, 0.7)`;
         }
 
-        // Text color: use contrast against detected background
         const textColor = getContrastColor(bgColor);
 
         return { textColor, backgroundColor };
@@ -181,10 +177,30 @@ async function analyzeFrameStyle(frame: FrameData): Promise<TextStyle[]> {
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
     // Get image dimensions
-    const metadata = await sharp(imageBuffer).metadata();
-    const imageHeight = metadata.height || 1080;
+    let imageHeight = 1080;
+    try {
+        const metadata = await sharp(imageBuffer).metadata();
+        imageHeight = metadata.height || 1080;
+    } catch (e) {
+        console.error('Error reading image metadata:', e);
+    }
 
-    for (const detection of frame.detections) {
+    // Deduplicate detections in this frame based on text content and proximity
+    const uniqueDetections: TextDetection[] = [];
+
+    for (const det of frame.detections) {
+        // Check if we already have a similar detection
+        const isDuplicate = uniqueDetections.some(existing =>
+            existing.text === det.text &&
+            Math.abs(existing.boundingBox.y - det.boundingBox.y) < 5 // Within 5% Y position
+        );
+
+        if (!isDuplicate) {
+            uniqueDetections.push(det);
+        }
+    }
+
+    for (const detection of uniqueDetections) {
         const { textColor, backgroundColor } = await sampleColorsFromRegion(
             imageBuffer,
             detection.boundingBox
@@ -193,7 +209,7 @@ async function analyzeFrameStyle(frame: FrameData): Promise<TextStyle[]> {
         const style: TextStyle = {
             fontSize: estimateFontSize(detection.boundingBox, imageHeight),
             color: textColor,
-            fontFamily: 'Inter, system-ui, sans-serif', // Default modern font
+            fontFamily: 'Inter, system-ui, sans-serif',
             background: backgroundColor,
             padding: '8px 16px',
             alignment: estimateAlignment(detection.boundingBox),
@@ -230,8 +246,16 @@ export async function POST(request: NextRequest) {
             styles: TextStyle[];
         }> = [];
 
+        // Track seen text to avoid redundant processing across frames
+        const processedTexts = new Set<string>();
+
         for (let i = 0; i < frames.length; i++) {
             const frame = frames[i];
+
+            // Filter detections that we've already processed (globally mostly)
+            // But we might want to capture style changes over time? 
+            // For now, let's just deduplicate within the frame analysis logic
+
             const styles = await analyzeFrameStyle(frame);
             allStyles.push({
                 frameIndex: i,
