@@ -28,7 +28,7 @@ function hexToFFmpegColor(hex: string): string {
     return clean.length === 6 ? clean : 'FFFFFF';
 }
 
-function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string): string[] {
+function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string | null): string[] {
     if (!overlays || overlays.length === 0) return [];
 
     return overlays.map((overlay) => {
@@ -47,7 +47,9 @@ function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string): string
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
 
-        return `drawtext=fontfile='${fontPath}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
+        // Only include fontfile if font path exists
+        const fontParam = fontPath ? `fontfile='${fontPath}':` : '';
+        return `drawtext=${fontParam}text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
     });
 }
 
@@ -91,11 +93,12 @@ export async function POST(request: NextRequest) {
 
         // Resolve font path
         const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf').replace(/\\/g, '/');
+        const fontExists = require('fs').existsSync(fontPath);
         console.log('Font path:', fontPath);
-        console.log('Font exists:', require('fs').existsSync(fontPath));
+        console.log('Font exists:', fontExists);
 
-        // Build FFmpeg command
-        const drawtextFilters = buildDrawtextFilters(overlays, fontPath);
+        // Build FFmpeg command - pass null if font doesn't exist
+        const drawtextFilters = buildDrawtextFilters(overlays, fontExists ? fontPath : null);
         console.log('Drawtext filters:', drawtextFilters);
 
         await new Promise<void>((resolve, reject) => {
