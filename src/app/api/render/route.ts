@@ -28,7 +28,7 @@ function hexToFFmpegColor(hex: string): string {
     return clean.length === 6 ? clean : 'FFFFFF';
 }
 
-function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
+function buildDrawtextFilters(overlays: TextOverlay[], fontPath: string): string[] {
     if (!overlays || overlays.length === 0) return [];
 
     return overlays.map((overlay) => {
@@ -39,7 +39,7 @@ function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
 
         const escapedText = text
             .replace(/\\/g, '\\\\\\\\')
-            .replace(/'/g, "'\\\\\\''")
+            .replace(/'/g, "'\\\\''")
             .replace(/:/g, '\\:')
             .replace(/\[/g, '\\[')
             .replace(/\]/g, '\\]');
@@ -47,7 +47,7 @@ function buildDrawtextFilters(overlays: TextOverlay[]): string[] {
         const x = `(w*${style.position.x}/100)`;
         const y = `(h*${style.position.y}/100)`;
 
-        return `drawtext=text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
+        return `drawtext=fontfile='${fontPath}':text='${escapedText}':fontsize=${fontSize}:fontcolor=${hexToFFmpegColor(style.color)}:x=${x}:y=${y}:enable='between(t,${start},${end})'`;
     });
 }
 
