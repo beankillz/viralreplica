@@ -91,9 +91,12 @@ export async function POST(request: NextRequest) {
 
         // Resolve font path
         const fontPath = path.join(process.cwd(), 'public', 'fonts', 'Inter-Bold.ttf').replace(/\\/g, '/');
+        console.log('Font path:', fontPath);
+        console.log('Font exists:', require('fs').existsSync(fontPath));
 
         // Build FFmpeg command
         const drawtextFilters = buildDrawtextFilters(overlays, fontPath);
+        console.log('Drawtext filters:', drawtextFilters);
 
         await new Promise<void>((resolve, reject) => {
             let cmd = ffmpeg(inputPath);
@@ -110,6 +113,9 @@ export async function POST(request: NextRequest) {
                     '-y'
                 ])
                 .output(outputPath)
+                .on('start', (commandLine) => {
+                    console.log('FFmpeg command:', commandLine);
+                })
                 .on('end', () => resolve())
                 .on('error', (err) => reject(err))
                 .run();
