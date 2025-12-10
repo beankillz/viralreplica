@@ -1,0 +1,11 @@
+# Nixpacks configuration for Railway deployment
+# Installs system dependencies: Chromium (for Puppeteer) and FFmpeg
+
+[phases.setup]
+nixPkgs = ['...', 'chromium', 'ffmpeg']
+
+[phases.install]
+cmds = ['npm ci']
+
+[start]
+cmd = 'npm start'

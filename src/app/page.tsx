@@ -1,395 +1,444 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import confetti from 'canvas-confetti';
 
-type Step = 'idle' | 'uploading' | 'extracting' | 'ocr' | 'styling' | 'rendering' | 'complete' | 'error';
+type Step = 'idle' | 'cloning' | 'complete' | 'error';
 
 interface ProcessingState {
   step: Step;
   progress: number;
   message: string;
+  stage: number;
 }
 
-interface OCRDetection {
-  text: string;
-  boundingBox: { x: number; y: number; width: number; height: number };
-  confidence?: number;
+interface ScriptVariation {
+  name: string;
+  segments: { role: string; text: string; }[];
 }
 
-interface StyleResult {
-  fontSize: string;
-  color: string;
-  fontFamily: string;
-  background: string;
-  padding: string;
-  alignment: string;
-  fontWeight: string;
-  textTransform: string;
-  position: { x: number; y: number };
-}
-
-const STEPS = [
-  { id: 'uploading', label: 'Upload Videos', icon: '📤' },
-  { id: 'extracting', label: 'Extract Frames', icon: '🎞️' },
-  { id: 'ocr', label: 'Detect Text', icon: '👁️' },
-  { id: 'styling', label: 'Analyze Style', icon: '🎨' },
-  { id: 'rendering', label: 'Render Video', icon: '🎬' },
-  { id: 'complete', label: 'Complete', icon: '✅' },
+const PROCESSING_STAGES = [
+  { name: 'Uploading videos...', duration: 5 },
+  { name: 'Extracting 20 frames...', duration: 10 },
+  { name: 'Analyzing with AI (Gemini)...', duration: 40 },
+  { name: 'Generating variations (Groq)...', duration: 8 },
+  { name: 'Rendering final video...', duration: 15 },
 ];
+
+const ERROR_MESSAGES: Record<string, string> = {
+  'Could not generate variations': '⏳ AI service is overloaded. Try again in 1 minute.',
+  'Failed to analyze': '🎬 Video analysis failed. Try a different video.',
+  'ENOENT': '📁 File not found. Please re-upload your video.',
+  'timeout': '⏱️ Processing took too long. Try a shorter video (under 30s).',
+  'Rate Limit': '🚦 API rate limit hit. Wait 30 seconds and try again.',
+};
+
+function getUserFriendlyError(error: string): string {
+  for (const [key, message] of Object.entries(ERROR_MESSAGES)) {
+    if (error.includes(key)) return message;
+  }
+  return '❌ Something went wrong. Please try again or contact support.';
+}
 
 export default function Home() {
   const [competitorVideo, setCompetitorVideo] = useState<File | null>(null);
   const [userVideo, setUserVideo] = useState<File | null>(null);
+  const [topic, setTopic] = useState<string>('');
+
+  const [competitorPreview, setCompetitorPreview] = useState<string | null>(null);
+  const [userPreview, setUserPreview] = useState<string | null>(null);
+  const [competitorDuration, setCompetitorDuration] = useState<number | null>(null);
+  const [userDuration, setUserDuration] = useState<number | null>(null);
+
   const [processing, setProcessing] = useState<ProcessingState>({
     step: 'idle',
     progress: 0,
     message: '',
+    stage: 0
   });
-  const [extractedText, setExtractedText] = useState<OCRDetection[]>([]);
-  const [detectedStyle, setDetectedStyle] = useState<StyleResult | null>(null);
+
   const [outputVideoUrl, setOutputVideoUrl] = useState<string | null>(null);
+  const [variations, setVariations] = useState<ScriptVariation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const competitorInputRef = useRef<HTMLInputElement>(null);
   const userInputRef = useRef<HTMLInputElement>(null);
 
-  const updateProgress = (step: Step, progress: number, message: string) => {
-    setProcessing({ step, progress, message });
+  // Load font
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;900&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+  }, []);
+
+  // Keyboard shortcut: Ctrl+Enter to generate
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'Enter' && competitorVideo && userVideo) {
+        handleProcess();
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [competitorVideo, userVideo, topic]);
+
+  const validateVideo = (file: File): string | null => {
+    if (file.size > 100 * 1024 * 1024) {
+      return 'Video must be under 100MB';
+    }
+    if (!file.type.includes('video')) {
+      return 'Please upload a video file (MP4, MOV, etc.)';
+    }
+    return null;
+  };
+
+  const handleCompetitorChange = (file: File | null) => {
+    if (!file) return;
+
+    const validationError = validateVideo(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setCompetitorVideo(file);
+    const url = URL.createObjectURL(file);
+    setCompetitorPreview(url);
+
+    const video = document.createElement('video');
+    video.src = url;
+    video.onloadedmetadata = () => {
+      setCompetitorDuration(video.duration);
+    };
+  };
+
+  const handleUserChange = (file: File | null) => {
+    if (!file) return;
+
+    const validationError = validateVideo(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setUserVideo(file);
+    const url = URL.createObjectURL(file);
+    setUserPreview(url);
+
+    const video = document.createElement('video');
+    video.src = url;
+    video.onloadedmetadata = () => {
+      setUserDuration(video.duration);
+    };
   };
 
   const handleProcess = async () => {
     if (!competitorVideo || !userVideo) {
-      setError('Please upload both videos');
+      toast.error('Please upload both videos to begin.');
       return;
     }
 
     setError(null);
     setOutputVideoUrl(null);
+    setVariations([]);
+
+    setProcessing({ step: 'cloning', progress: 0, message: PROCESSING_STAGES[0].name, stage: 0 });
 
     try {
-      // Step 1: Upload competitor video
-      updateProgress('uploading', 10, 'Uploading competitor video...');
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', competitorVideo);
+      const formData = new FormData();
+      formData.append('competitorVideo', competitorVideo);
+      formData.append('userVideo', userVideo);
+      formData.append('topic', topic || 'viral content');
 
-      const uploadRes = await fetch('/api/upload', {
+      // Simulate stage progression
+      let currentStage = 0;
+      let currentProgress = 0;
+
+      const progressInterval = setInterval(() => {
+        setProcessing(prev => {
+          if (prev.step !== 'cloning') return prev;
+
+          const stage = PROCESSING_STAGES[currentStage];
+          const stageProgress = Math.min(currentProgress + 1, stage.duration);
+
+          if (stageProgress >= stage.duration && currentStage < PROCESSING_STAGES.length - 1) {
+            currentStage++;
+            currentProgress = 0;
+          } else {
+            currentProgress = stageProgress;
+          }
+
+          const totalDuration = PROCESSING_STAGES.reduce((sum, s) => sum + s.duration, 0);
+          const completedDuration = PROCESSING_STAGES.slice(0, currentStage).reduce((sum, s) => sum + s.duration, 0);
+          const overallProgress = Math.min(((completedDuration + currentProgress) / totalDuration) * 100, 95);
+
+          return {
+            ...prev,
+            progress: overallProgress,
+            message: PROCESSING_STAGES[currentStage].name,
+            stage: currentStage
+          };
+        });
+      }, 1000);
+
+      const res = await fetch('/api/clone', {
         method: 'POST',
-        body: uploadFormData,
+        body: formData,
       });
 
-      if (!uploadRes.ok) throw new Error('Failed to upload competitor video');
-      updateProgress('uploading', 30, 'Competitor video uploaded');
+      clearInterval(progressInterval);
 
-      // Step 2: Extract frames
-      updateProgress('extracting', 40, 'Extracting frames at 1 FPS...');
-      const extractFormData = new FormData();
-      extractFormData.append('file', competitorVideo);
-
-      const extractRes = await fetch('/api/extract', {
-        method: 'POST',
-        body: extractFormData,
-      });
-
-      if (!extractRes.ok) throw new Error('Failed to extract frames');
-      const extractData = await extractRes.json();
-      updateProgress('extracting', 50, `Extracted ${extractData.frameCount} frames`);
-
-      // Step 3: OCR - detect text in frames
-      updateProgress('ocr', 55, 'Detecting text in frames...');
-      const ocrRes = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frames: extractData.frames }),
-      });
-
-      if (!ocrRes.ok) throw new Error('Failed to detect text');
-      const ocrData = await ocrRes.json();
-
-      const allDetections = ocrData.results.flatMap((r: { detections: OCRDetection[] }) => r.detections);
-      setExtractedText(allDetections);
-      updateProgress('ocr', 65, `Found ${allDetections.length} text elements`);
-
-      // Step 4: Analyze style
-      updateProgress('styling', 70, 'Analyzing text styles...');
-      const framesWithDetections = extractData.frames.map((frame: { base64: string; timestamp: number }, i: number) => ({
-        ...frame,
-        detections: ocrData.results[i]?.detections || [],
-      }));
-
-      const styleRes = await fetch('/api/style', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frames: framesWithDetections }),
-      });
-
-      if (!styleRes.ok) throw new Error('Failed to analyze style');
-      const styleData = await styleRes.json();
-      setDetectedStyle(styleData.dominantStyle);
-      updateProgress('styling', 80, 'Style analysis complete');
-
-      // Step 5: Render video with text overlays
-      updateProgress('rendering', 85, 'Rendering video with overlays...');
-
-      // Build overlays from OCR detections
-      const overlays = ocrData.results.flatMap((frameResult: { frameIndex: number; timestamp?: number; detections: OCRDetection[] }) =>
-        frameResult.detections.map((det: OCRDetection) => ({
-          text: det.text,
-          startTime: frameResult.timestamp || frameResult.frameIndex * 1000,
-          endTime: (frameResult.timestamp || frameResult.frameIndex * 1000) + 2000, // Show for 2 seconds
-          style: {
-            fontSize: styleData.dominantStyle?.fontSize || '24px',
-            color: styleData.dominantStyle?.color || '#FFFFFF',
-            background: styleData.dominantStyle?.background || 'rgba(0,0,0,0.7)',
-            position: det.boundingBox,
-            alignment: styleData.dominantStyle?.alignment || 'center',
-            fontWeight: styleData.dominantStyle?.fontWeight || 'bold',
-          },
-        }))
-      );
-
-      // Create FormData for minimal memory usage on client side
-      const renderFormData = new FormData();
-      renderFormData.append('video', userVideo);
-      renderFormData.append('overlays', JSON.stringify(overlays));
-
-      const renderRes = await fetch('/api/render', {
-        method: 'POST',
-        body: renderFormData,
-      });
-
-      if (!renderRes.ok) {
-        // Fallback to showing user video if render fails
-        console.warn('Render failed, showing original user video');
-        const userVideoUrl = URL.createObjectURL(userVideo);
-        setOutputVideoUrl(userVideoUrl);
-      } else {
-        const renderBlob = await renderRes.blob();
-        const renderUrl = URL.createObjectURL(renderBlob);
-        setOutputVideoUrl(renderUrl);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ error: res.statusText }));
+        throw errJson;
       }
 
-      updateProgress('complete', 100, 'Processing complete!');
+      // Check for Variations Header
+      const variationsHeader = res.headers.get('X-Variations');
+      if (variationsHeader) {
+        try {
+          setVariations(JSON.parse(variationsHeader));
+        } catch (e) {
+          console.warn('Failed to parse variations header');
+        }
+      }
 
-    } catch (err) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setOutputVideoUrl(url);
+      setProcessing({ step: 'complete', progress: 100, message: 'Clone Ready!', stage: PROCESSING_STAGES.length });
+
+      // Success feedback
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+      toast.success('🎉 Clone ready! Your viral replica is complete.', { duration: 4000 });
+
+    } catch (err: any) {
       console.error('Processing error:', err);
-      setError(err instanceof Error ? err.message : 'Processing failed');
-      setProcessing({ step: 'error', progress: 0, message: 'Error occurred' });
+      const friendlyError = getUserFriendlyError(err.error || JSON.stringify(err));
+      setError(friendlyError);
+      toast.error(friendlyError, { duration: 5000 });
+      setProcessing({ step: 'error', progress: 0, message: 'Process Failed', stage: 0 });
     }
   };
 
-  const getStepStatus = (stepId: string): 'pending' | 'active' | 'complete' | 'error' => {
-    const stepOrder = STEPS.map(s => s.id);
-    const currentIndex = stepOrder.indexOf(processing.step);
-    const stepIndex = stepOrder.indexOf(stepId);
-
-    if (processing.step === 'error') return 'error';
-    if (processing.step === 'idle') return 'pending';
-    if (stepIndex < currentIndex) return 'complete';
-    if (stepIndex === currentIndex) return 'active';
-    return 'pending';
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-black to-zinc-900 text-white">
-      <main className="container mx-auto px-4 py-12 max-w-5xl">
+    <div className="min-h-screen relative overflow-hidden font-['Inter']">
+      <Toaster position="top-right" />
+
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 z-[-1]">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/30 rounded-full blur-[120px] animate-pulse-slow"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '1.5s' }}></div>
+      </div>
+
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-20 max-w-5xl">
+
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent">
-            Viral Replica
+        <div className="text-center mb-16 sm:mb-24 animate-fade-in">
+          <h1 className="text-5xl sm:text-7xl font-black mb-4 sm:mb-6 tracking-tight">
+            VIRAL <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent text-glow">REPLICA</span>
           </h1>
-          <p className="text-xl text-zinc-400">
-            Clone viral video patterns with AI
+          <p className="text-lg sm:text-xl text-zinc-400 font-light max-w-2xl mx-auto leading-relaxed">
+            The world's most advanced AI cloner. <br className="hidden sm:block" />
+            Steal the <span className="text-white font-medium">pattern</span>. Keep the <span className="text-white font-medium">vibe</span>.
           </p>
+          <p className="text-xs text-zinc-600 mt-4">💡 Tip: Press <kbd className="px-2 py-1 bg-zinc-800 rounded text-zinc-400">Ctrl+Enter</kbd> to generate</p>
         </div>
 
-        {/* Upload Section */}
-        <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* Competitor Video */}
+        {/* Inputs Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-12 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+
+          {/* Competitor Upload */}
           <div
             onClick={() => competitorInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${competitorVideo
-              ? 'border-green-500 bg-green-500/10'
-              : 'border-zinc-700 hover:border-purple-500'
-              }`}
+            className={`glass glass-hover p-1 rounded-3xl cursor-pointer group relative overflow-hidden transition-all duration-500
+              ${competitorVideo ? 'border-purple-500/50 shadow-purple-500/20' : 'border-white/5'}
+            `}
           >
-            <input
-              ref={competitorInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => setCompetitorVideo(e.target.files?.[0] || null)}
-            />
-            <div className="text-4xl mb-3">🎯</div>
-            <h3 className="font-semibold mb-1">Competitor Video</h3>
-            <p className="text-sm text-zinc-500">
-              {competitorVideo ? competitorVideo.name : 'Upload the viral video to analyze'}
-            </p>
-          </div>
-
-          {/* User Video */}
-          <div
-            onClick={() => userInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${userVideo
-              ? 'border-green-500 bg-green-500/10'
-              : 'border-zinc-700 hover:border-purple-500'
-              }`}
-          >
-            <input
-              ref={userInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => setUserVideo(e.target.files?.[0] || null)}
-            />
-            <div className="text-4xl mb-3">🎬</div>
-            <h3 className="font-semibold mb-1">Your Video</h3>
-            <p className="text-sm text-zinc-500">
-              {userVideo ? userVideo.name : 'Upload your video to apply the style'}
-            </p>
-          </div>
-        </div>
-
-        {/* Process Button */}
-        <div className="text-center mb-12">
-          <button
-            onClick={handleProcess}
-            disabled={!competitorVideo || !userVideo || (processing.step !== 'idle' && processing.step !== 'complete' && processing.step !== 'error')}
-            className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full font-semibold text-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
-          >
-            {processing.step === 'idle' || processing.step === 'complete' || processing.step === 'error'
-              ? '🚀 Start Processing'
-              : '⏳ Processing...'}
-          </button>
-        </div>
-
-        {/* Progress Steps */}
-        {processing.step !== 'idle' && (
-          <div className="bg-zinc-800/50 rounded-2xl p-6 mb-8">
-            <div className="flex justify-between items-center mb-4">
-              {STEPS.map((step, i) => {
-                const status = getStepStatus(step.id);
-                return (
-                  <div key={step.id} className="flex flex-col items-center flex-1">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg mb-2 transition-all ${status === 'complete' ? 'bg-green-500' :
-                      status === 'active' ? 'bg-purple-500 animate-pulse' :
-                        status === 'error' ? 'bg-red-500' :
-                          'bg-zinc-700'
-                      }`}>
-                      {status === 'complete' ? '✓' : step.icon}
-                    </div>
-                    <span className={`text-xs text-center ${status === 'active' ? 'text-purple-400' :
-                      status === 'complete' ? 'text-green-400' :
-                        'text-zinc-500'
-                      }`}>
-                      {step.label}
-                    </span>
-                    {i < STEPS.length - 1 && (
-                      <div className="hidden md:block absolute w-full h-0.5 bg-zinc-700 top-5 left-1/2 -z-10" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Progress Bar */}
-            <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                style={{ width: `${processing.progress}%` }}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="bg-black/40 rounded-[20px] h-64 flex flex-col items-center justify-center p-6 sm:p-8 text-center relative z-10">
+              <input
+                ref={competitorInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => handleCompetitorChange(e.target.files?.[0] || null)}
               />
-            </div>
-            <p className="text-sm text-zinc-400 mt-2 text-center">{processing.message}</p>
-          </div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-500/20 border border-red-500 rounded-xl p-4 mb-8 text-center">
-            <p className="text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Results Section */}
-        {processing.step === 'complete' && (
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Detected Text */}
-            <div className="bg-zinc-800/50 rounded-2xl p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <span>👁️</span> Detected Text
-              </h3>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {extractedText.length > 0 ? (
-                  extractedText.map((det, i) => (
-                    <div key={i} className="bg-zinc-700/50 rounded-lg p-3">
-                      <p className="font-mono text-sm">{det.text}</p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-zinc-500">No text detected</p>
-                )}
-              </div>
-            </div>
-
-            {/* Detected Style */}
-            <div className="bg-zinc-800/50 rounded-2xl p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <span>🎨</span> Detected Style
-              </h3>
-              {detectedStyle ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Font Size</span>
-                    <span>{detectedStyle.fontSize}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Color</span>
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 rounded" style={{ backgroundColor: detectedStyle.color }} />
-                      {detectedStyle.color}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Background</span>
-                    <span>{detectedStyle.background}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Alignment</span>
-                    <span>{detectedStyle.alignment}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Font Weight</span>
-                    <span>{detectedStyle.fontWeight}</span>
-                  </div>
+              {competitorPreview ? (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <video src={competitorPreview} className="max-h-32 rounded-lg mb-2" />
+                  <p className="text-sm text-zinc-400">{competitorVideo?.name}</p>
+                  {competitorDuration && <p className="text-xs text-zinc-600">{competitorDuration.toFixed(1)}s</p>}
                 </div>
               ) : (
-                <p className="text-zinc-500">No style detected</p>
+                <>
+                  <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-purple-500 transition-all duration-300 shadow-lg">
+                    <span className="text-2xl">🎯</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Target Video</h3>
+                  <p className="text-xs sm:text-sm text-zinc-500">Upload the viral video to replicate</p>
+                </>
               )}
             </div>
           </div>
-        )}
 
-        {/* Output Video */}
-        {outputVideoUrl && (
-          <div className="mt-8 bg-zinc-800/50 rounded-2xl p-6">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <span>🎬</span> Output Video
-            </h3>
-            <video
-              src={outputVideoUrl}
-              controls
-              className="w-full rounded-xl mb-4"
-            />
-            <div className="text-center">
-              <a
-                href={outputVideoUrl}
-                download="viral-replica-output.mp4"
-                className="inline-block px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full font-semibold hover:scale-105 transition-transform"
-              >
-                ⬇️ Download Video
-              </a>
+          {/* User Upload */}
+          <div
+            onClick={() => userInputRef.current?.click()}
+            className={`glass glass-hover p-1 rounded-3xl cursor-pointer group relative overflow-hidden transition-all duration-500
+              ${userVideo ? 'border-emerald-500/50 shadow-emerald-500/20' : 'border-white/5'}
+            `}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="bg-black/40 rounded-[20px] h-64 flex flex-col items-center justify-center p-6 sm:p-8 text-center relative z-10">
+              <input
+                ref={userInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => handleUserChange(e.target.files?.[0] || null)}
+              />
+              {userPreview ? (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <video src={userPreview} className="max-h-32 rounded-lg mb-2" />
+                  <p className="text-sm text-zinc-400">{userVideo?.name}</p>
+                  {userDuration && <p className="text-xs text-zinc-600">{userDuration.toFixed(1)}s</p>}
+                </div>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-emerald-500 transition-all duration-300 shadow-lg">
+                    <span className="text-2xl">🎥</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Your Content</h3>
+                  <p className="text-xs sm:text-sm text-zinc-500">Upload your background footage</p>
+                </>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* Topic & Action */}
+        <div className="glass p-6 sm:p-8 rounded-3xl animate-slide-up mb-20 relative max-w-3xl mx-auto" style={{ animationDelay: '0.4s' }}>
+          <div className="flex flex-col md:flex-row gap-6 items-center">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3 ml-2">Topic / Niche</label>
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Crypto, Health, Tech..."
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg focus:outline-none focus:border-purple-500/50 focus:bg-black/70 transition-all placeholder:text-zinc-700"
+              />
+            </div>
+            <button
+              onClick={handleProcess}
+              disabled={!competitorVideo || !userVideo || processing.step === 'cloning'}
+              className="w-full md:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-white text-black rounded-xl font-bold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-all shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] mt-6 md:mt-0"
+            >
+              {processing.step === 'cloning' ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                  <span>PROCESSING</span>
+                </div>
+              ) : 'GENERATE'}
+            </button>
+          </div>
+
+          {/* Detailed Progress Bar */}
+          {processing.step === 'cloning' && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-zinc-400 font-mono">{processing.message}</p>
+                <p className="text-xs text-zinc-600">{Math.round(processing.progress)}%</p>
+              </div>
+              <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 transition-all duration-300 rounded-full"
+                  style={{ width: `${processing.progress}%` }}
+                ></div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                {PROCESSING_STAGES.map((stage, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex-1 h-1 rounded-full transition-all ${idx < processing.stage ? 'bg-purple-500' :
+                        idx === processing.stage ? 'bg-purple-500/50' :
+                          'bg-zinc-800'
+                      }`}
+                  ></div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="max-w-3xl mx-auto mb-12 animate-fade-in glass border-red-500/30 bg-red-500/5 p-6 rounded-2xl text-center">
+            <p className="text-red-400 font-medium text-base sm:text-lg">{error}</p>
+          </div>
         )}
+
+        {/* Results */}
+        {processing.step === 'complete' && outputVideoUrl && (
+          <div className="animate-slide-up space-y-12">
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+
+            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-8">Ready to <span className="text-purple-400">Viral</span></h2>
+
+            <div className="glass p-2 rounded-[32px] max-w-5xl mx-auto relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-[32px] blur-xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
+              <div className="relative rounded-[30px] overflow-hidden bg-black aspect-video shadow-2xl">
+                <video src={outputVideoUrl} controls autoPlay muted className="w-full h-full object-contain" />
+              </div>
+            </div>
+
+            <div className="flex justify-center">
+              <a
+                href={outputVideoUrl}
+                download="viral-replica.mp4"
+                className="px-8 sm:px-12 py-3 sm:py-4 bg-white text-black rounded-full font-bold text-base sm:text-lg hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all flex items-center gap-3"
+              >
+                <span>⬇️</span> Download Replica
+              </a>
+            </div>
+
+            {/* Variations */}
+            {variations.length > 0 && (
+              <div className="mt-24">
+                <h3 className="text-xl sm:text-2xl font-bold text-center mb-10 text-zinc-500">Generated Variations</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {variations.map((v, i) => (
+                    <div key={i} className="glass p-6 sm:p-8 rounded-3xl hover:bg-white/10 transition-colors">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">{i + 1}</div>
+                        <h4 className="font-bold text-purple-300 text-sm sm:text-base">{v.name}</h4>
+                      </div>
+                      <div className="space-y-4">
+                        {v.segments.map((seg, j) => (
+                          <div key={j} className="text-xs sm:text-sm text-zinc-400 leading-relaxed border-l-2 border-white/5 pl-4">
+                            {seg.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <footer className="mt-32 text-center text-zinc-700 text-xs sm:text-sm">
+          Viral Replica AI • {new Date().getFullYear()}
+        </footer>
+
       </main>
     </div>
   );
