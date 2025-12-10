@@ -8,6 +8,7 @@ import { TextOverlay, VisionResult, ScriptVariation } from '../../../types/video
 import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import config from '../../../lib/config';
 
 export const maxDuration = 300;
 
@@ -25,6 +26,17 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing videos' }, { status: 400 });
         }
 
+        // FREE TIER: Validate video sizes
+        const compValidation = config.validateVideoSize(competitorVideo.size);
+        if (!compValidation.valid) {
+            return NextResponse.json({ error: compValidation.error }, { status: 413 });
+        }
+
+        const userValidation = config.validateVideoSize(userVideo.size);
+        if (!userValidation.valid) {
+            return NextResponse.json({ error: userValidation.error }, { status: 413 });
+        }
+
         const tempDir = tmpdir();
 
         // 1. Save Competitor Video
@@ -37,9 +49,12 @@ export async function POST(request: NextRequest) {
 
         // --- STEP 1: THE EYE ---
         console.log('Running Eye...');
-        // Increase FPS for better timestamp accuracy (appearing/disappearing)
-        // UPGRADED: 20 frames for 95%+ accuracy (paid tier)
-        const frames = await frameExtractor.extractFrames(tempCompetitorPath, { fps: 2, maxFrames: 20 });
+        // Dynamic frame settings based on tier (free tier: 10 frames @ 1fps, paid: 20 frames @ 2fps)
+        const frameSettings = config.getFrameSettings();
+        const frames = await frameExtractor.extractFrames(tempCompetitorPath, {
+            fps: frameSettings.fps,
+            maxFrames: frameSettings.maxFrames
+        });
         const visionResults = await visionService.analyzeVideoFrames(frames);
 
         // Find dominant style (heuristic: last found style or first)

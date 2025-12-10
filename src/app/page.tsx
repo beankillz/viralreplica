@@ -18,9 +18,13 @@ interface ScriptVariation {
   segments: { role: string; text: string; }[];
 }
 
+// Free tier: 10 frames, Paid tier: 20 frames
+const MAX_VIDEO_SIZE_MB = parseInt(process.env.NEXT_PUBLIC_MAX_VIDEO_SIZE_MB || '10');
+const FRAME_COUNT = parseInt(process.env.NEXT_PUBLIC_MAX_FRAMES || '10');
+
 const PROCESSING_STAGES = [
   { name: 'Uploading videos...', duration: 5 },
-  { name: 'Extracting 20 frames...', duration: 10 },
+  { name: `Extracting ${FRAME_COUNT} frames...`, duration: 10 },
   { name: 'Analyzing with AI (Gemini)...', duration: 40 },
   { name: 'Generating variations (Groq)...', duration: 8 },
   { name: 'Rendering final video...', duration: 15 },
@@ -85,8 +89,9 @@ export default function Home() {
   }, [competitorVideo, userVideo, topic]);
 
   const validateVideo = (file: File): string | null => {
-    if (file.size > 100 * 1024 * 1024) {
-      return 'Video must be under 100MB';
+    const maxSizeBytes = MAX_VIDEO_SIZE_MB * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      return `Video must be under ${MAX_VIDEO_SIZE_MB}MB (free tier limit)`;
     }
     if (!file.type.includes('video')) {
       return 'Please upload a video file (MP4, MOV, etc.)';
@@ -368,8 +373,8 @@ export default function Home() {
                   <div
                     key={idx}
                     className={`flex-1 h-1 rounded-full transition-all ${idx < processing.stage ? 'bg-purple-500' :
-                        idx === processing.stage ? 'bg-purple-500/50' :
-                          'bg-zinc-800'
+                      idx === processing.stage ? 'bg-purple-500/50' :
+                        'bg-zinc-800'
                       }`}
                   ></div>
                 ))}
