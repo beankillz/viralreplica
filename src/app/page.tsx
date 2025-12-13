@@ -289,6 +289,35 @@ export default function Home() {
         }
       }
 
+      const warningsHeader = res.headers.get('X-Warnings');
+      if (warningsHeader) {
+        try {
+          const warnings = JSON.parse(warningsHeader);
+          if (Array.isArray(warnings) && warnings.length > 0) {
+            // Show specific warning
+            toast((t) => (
+              <div className="flex flex-col gap-1">
+                <span className="font-bold">⚠️ Design Fallback Used</span>
+                <span className="text-sm">
+                  {warnings[0]}
+                </span>
+                <span className="text-xs opacity-70">Check the "Customize Design" panel to tweak it.</span>
+              </div>
+            ), {
+              icon: '⚠️',
+              duration: 6000,
+              style: {
+                background: '#3f3f46',
+                color: '#fff',
+                border: '1px solid #f59e0b'
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to parse warnings');
+        }
+      }
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       setOutputVideoUrl(url);

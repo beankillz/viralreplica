@@ -34,9 +34,14 @@ export class PipelineOrchestrator {
         ]);
 
         // Ensure DesignSystem has robust defaults
+        const warnings: string[] = [];
+
+        const primaryFont = rawDesignSystem?.fonts?.primary;
+        if (!primaryFont) warnings.push("Could not detect font, using default 'Inter'");
+
         const designSystem = {
             fonts: {
-                primary: rawDesignSystem?.fonts?.primary || 'Inter',
+                primary: primaryFont || 'Inter',
                 secondary: rawDesignSystem?.fonts?.secondary || 'Inter',
             },
             colors: {
@@ -90,7 +95,8 @@ export class PipelineOrchestrator {
             projectId: uuidv4(),
             overlays: enrichedOverlays,
             designSystem,
-            variations
+            variations,
+            warnings
         };
     }
 

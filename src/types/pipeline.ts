@@ -133,4 +133,5 @@ export interface PipelineResult {
         segmentId: string;
         variations: string[];
     }[];
+    warnings?: string[];
 }

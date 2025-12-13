@@ -146,7 +146,8 @@ export async function POST(request: NextRequest) {
                 'Content-Type': 'video/mp4',
                 'Content-Disposition': `attachment; filename="clone-${Date.now()}.mp4"`,
                 'X-Variations': JSON.stringify(variations),
-                'X-Schema': JSON.stringify(dominantStyle)
+                'X-Schema': JSON.stringify(dominantStyle),
+                'X-Warnings': pipelineResult.warnings ? JSON.stringify(pipelineResult.warnings) : '[]'
             }
         });
 
