@@ -8,8 +8,8 @@
 /* In v4, we can just write CSS. 'utilities' layer is implicit or can be explicit. */
 @layer utilities {
   .glass {
-    @apply bg-zinc-900/40 backdrop-blur-2xl border border-white/10 shadow-2xl;
-    box-shadow: 0 0 40px -10px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.02);
+    @apply bg-white/5 backdrop-blur-3xl border border-white/10 shadow-2xl;
+    box-shadow: 0 0 40px -10px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.05);
   }
 
   .glass-hover {

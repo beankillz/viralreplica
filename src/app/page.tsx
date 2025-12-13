@@ -306,7 +306,7 @@ export default function Home() {
             `}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
-            <div className="bg-black/40 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-black/30">
+            <div className="bg-white/5 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-white/10">
               <input
                 ref={competitorInputRef}
                 type="file"
@@ -344,7 +344,7 @@ export default function Home() {
             `}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
-            <div className="bg-black/40 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-black/30">
+            <div className="bg-white/5 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-white/10">
               <input
                 ref={userInputRef}
                 type="file"
@@ -462,7 +462,7 @@ export default function Home() {
 
               {/* Video Player */}
               <div className={`glass p-3 rounded-[2.5rem] mx-auto relative group transition-all duration-700
-                    ${isEditing ? 'flex-1 bg-black/40 border-white/5' : 'max-w-6xl'}
+                    ${isEditing ? 'flex-1 bg-white/5 border-white/5' : 'max-w-6xl'}
                 `}>
                 {!isEditing && <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-[2.5rem] blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700"></div>}
                 <div className={`relative rounded-[2rem] overflow-hidden bg-black shadow-2xl w-full flex items-center justify-center
