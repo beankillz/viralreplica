@@ -6,6 +6,7 @@ import confetti from 'canvas-confetti';
 import { useEditorStore } from '../lib/stores/editorStore';
 import { EditorPanel } from '../components/editor/EditorPanel';
 import { ScriptVariation } from '../types/video-processing';
+import { QAScoreDisplay } from '../components/qa/QAScoreDisplay';
 
 type Step = 'idle' | 'cloning' | 'complete' | 'error';
 
@@ -64,11 +65,15 @@ export default function Home() {
   const [variations, setVariations] = useState<ScriptVariation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // QA State
+  const [qaReport, setQaReport] = useState<any>(null); // Type check later
+  const [qaLoading, setQaLoading] = useState(false);
+
   const competitorInputRef = useRef<HTMLInputElement>(null);
   const userInputRef = useRef<HTMLInputElement>(null);
 
   const { project, setProject, isEditing, exitEditor } = useEditorStore();
-  // Access output URL safely from project state
+  // Access output URL safely from project state, or fallback to local clone
   const editorOutputUrl = project?.outputVideoUrl;
   const activeVideoUrl = editorOutputUrl || outputVideoUrl;
 
@@ -79,6 +84,63 @@ export default function Home() {
     link.rel = 'stylesheet';
     document.head.appendChild(link);
   }, []);
+
+  // QA Check Logic
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const runQACheck = async (blobUrl: string, schema: any, segments: any[]) => {
+    try {
+      setQaLoading(true);
+      setQaReport(null);
+
+      // Fetch blob from url
+      const response = await fetch(blobUrl);
+      const blob = await response.blob();
+      const base64 = await blobToBase64(blob);
+
+      const res = await fetch('/api/qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: base64,
+          designSchema: schema,
+          segments: segments
+        })
+      });
+
+      if (res.ok) {
+        const report = await res.json();
+        setQaReport(report);
+      }
+    } catch (e) {
+      console.error("QA Failed", e);
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
+  // Trigger QA when activeVideoUrl changes and we have a project schema
+  useEffect(() => {
+    if (activeVideoUrl && project?.designSchema && !isEditing) {
+      // Find current segments
+      let segments: any[] = [];
+      if (project.variations && project.variations.length > 0) {
+        const idx = project.selectedVariationIndex || 0;
+        // Fallback to first if index out of bounds
+        segments = project.variations[idx]?.segments || project.variations[0].segments;
+      }
+
+      runQACheck(activeVideoUrl, project.designSchema, segments);
+    }
+  }, [activeVideoUrl, project?.designSchema, isEditing, project?.variations, project?.selectedVariationIndex]);
+
 
   // Keyboard shortcut: Ctrl+Enter to generate
   useEffect(() => {
@@ -246,6 +308,7 @@ export default function Home() {
           variations: parsedVariations,
           selectedVariationIndex: 0,
           designSchema: parsedSchema,
+          outputVideoUrl: url,
         });
       }
 
@@ -481,23 +544,31 @@ export default function Home() {
             </div>
 
             {!isEditing && (
-              <div className="flex flex-col sm:flex-row justify-center gap-6">
-                <a
-                  href={activeVideoUrl}
-                  download="viral-replica.mp4"
-                  className="px-10 py-4 bg-white text-black rounded-full font-bold text-lg hover:scale-105 hover:bg-zinc-100 transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_-5px_rgba(255,255,255,0.3)] transform active:scale-95"
-                >
-                  <span>⬇️</span> Download Replica
-                </a>
-                {/* Edit Button */}
-                {project && (
-                  <button
-                    onClick={() => setProject({ ...project })}
-                    className="px-10 py-4 glass bg-white/5 text-white border-white/20 rounded-full font-bold text-lg hover:scale-105 hover:bg-white/10 hover:border-white/40 transition-all flex items-center justify-center gap-3 backdrop-blur-md transform active:scale-95"
+              <div className="flex flex-col items-center gap-8">
+
+                {/* QA Display - Added here */}
+                <div className="w-full max-w-2xl">
+                  <QAScoreDisplay report={qaReport} isLoading={qaLoading} />
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-center gap-6">
+                  <a
+                    href={activeVideoUrl}
+                    download="viral-replica.mp4"
+                    className="px-10 py-4 bg-white text-black rounded-full font-bold text-lg hover:scale-105 hover:bg-zinc-100 transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_-5px_rgba(255,255,255,0.3)] transform active:scale-95"
                   >
-                    <span>🎨</span> Customize Design
-                  </button>
-                )}
+                    <span>⬇️</span> Download Replica
+                  </a>
+                  {/* Edit Button */}
+                  {project && (
+                    <button
+                      onClick={() => setProject({ ...project })}
+                      className="px-10 py-4 glass bg-white/5 text-white border-white/20 rounded-full font-bold text-lg hover:scale-105 hover:bg-white/10 hover:border-white/40 transition-all flex items-center justify-center gap-3 backdrop-blur-md transform active:scale-95"
+                    >
+                      <span>🎨</span> Customize Design
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

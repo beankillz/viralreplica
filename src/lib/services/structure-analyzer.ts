@@ -1,4 +1,3 @@
-import Groq from 'groq-sdk';
 import {
     EnrichedOverlay,
     DesignSystem,
@@ -7,7 +6,8 @@ import {
     ConsolidatedTextInstance
 } from '../../types/pipeline';
 
-const MODEL_NAME = 'llama3-70b-8192'; // High intelligence model for reasoning
+const MODEL_NAME = 'qwen/qwen3-vl-8b-instruct'; // User requested model via OpenRouter
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // --- Prompts from User ---
 
@@ -53,12 +53,13 @@ Return text only
 Output JSON only`;
 
 export class StructureAnalyzerService {
-    private groq: Groq;
+    private apiKey: string;
 
     constructor() {
-        this.groq = new Groq({
-            apiKey: process.env.GROQ_API_KEY
-        });
+        this.apiKey = process.env.OPENROUTER_API_KEY || '';
+        if (!this.apiKey) {
+            console.warn('OPENROUTER_API_KEY is not set in StructureAnalyzerService');
+        }
     }
 
     async analyzeLayout(overlays: ConsolidatedTextInstance[]): Promise<Map<string, LayoutLogic>> {
@@ -160,19 +161,35 @@ export class StructureAnalyzerService {
 
     private async callC(systemPrompt: string, userContent: string): Promise<string> {
         try {
-            const completion = await this.groq.chat.completions.create({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userContent }
-                ],
-                model: MODEL_NAME,
-                temperature: 0.1, // Low temp for structured tasks
-                response_format: { type: 'json_object' }
+            const response = await fetch(OPENROUTER_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+                    'X-Title': 'Viral Replica structure-analyzer'
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userContent }
+                    ],
+                    temperature: 0.1, // Low temp for structured tasks
+                    response_format: { type: 'json_object' }
+                })
             });
 
-            return completion.choices[0]?.message?.content || '{}';
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content || '{}';
+
         } catch (error) {
-            console.error('Groq Analysis Failed:', error);
+            console.error('OpenRouter Analysis Failed:', error);
             throw error;
         }
     }
