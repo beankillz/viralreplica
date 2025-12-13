@@ -287,7 +287,7 @@ export default function Home() {
 
         {/* Header */}
         <div className="text-center mb-16 sm:mb-24 animate-fade-in user-select-none">
-          <h1 className="text-6xl sm:text-8xl font-black mb-6 tracking-tighter hover:scale-[1.02] transition-transform duration-500 cursor-default">
+          <h1 className="text-6xl sm:text-8xl font-black mb-6 tracking-tighter hover:scale-[1.02] transition-transform duration-500 cursor-default text-white">
             VIRAL <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent text-glow bg-[length:200%_auto] animate-liquid-bar">REPLICA</span>
           </h1>
           <p className="text-lg sm:text-2xl text-zinc-400 font-light max-w-2xl mx-auto leading-relaxed opacity-90">
