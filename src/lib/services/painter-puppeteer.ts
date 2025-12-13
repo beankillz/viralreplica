@@ -80,8 +80,11 @@ export class PainterService {
                 font-weight: ${o.style.fontWeight};
                 white-space: pre-wrap;
                 text-align: ${o.style.alignment};
+                letter-spacing: ${o.style.letterSpacing || 'normal'};
+                text-transform: ${o.style.textTransform || 'none'};
                 box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-                max-width: 80%;
+                ${o.style.width ? `width: ${o.style.width};` : 'max-width: 80%;'}
+                ${o.style.height ? `height: ${o.style.height};` : ''}
             `;
 
             // Add animation if motion path exists

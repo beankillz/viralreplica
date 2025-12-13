@@ -5,15 +5,16 @@
 
 export const config = {
     // Free tier mode (reduces memory usage)
-    freeTierMode: process.env.FREE_TIER_MODE === 'true',
+    // Free tier mode (reduces memory usage)
+    freeTierMode: process.env.FREE_TIER_MODE === 'true', // Defaults to false if undefined
 
     // Video processing limits
-    maxVideoSizeMB: parseInt(process.env.MAX_VIDEO_SIZE_MB || '10'),
-    maxVideoDurationSec: parseInt(process.env.MAX_VIDEO_DURATION_SEC || '15'),
+    maxVideoSizeMB: parseInt(process.env.MAX_VIDEO_SIZE_MB || '100'),
+    maxVideoDurationSec: parseInt(process.env.MAX_VIDEO_DURATION_SEC || '60'),
 
     // Frame extraction settings
-    maxFrames: parseInt(process.env.MAX_FRAMES || '10'),
-    frameFPS: parseInt(process.env.FRAME_FPS || '1'),
+    maxFrames: parseInt(process.env.MAX_FRAMES || '30'),
+    frameFPS: parseInt(process.env.FRAME_FPS || '2'),
 
     // Memory limits
     maxConcurrentProcessing: 1, // Process one video at a time
@@ -31,8 +32,8 @@ export const config = {
             };
         }
         return {
-            fps: 2,
-            maxFrames: 20,
+            fps: this.frameFPS, // Use configured FPS
+            maxFrames: this.maxFrames, // Use configured Max Frames
             quality: 'high'
         };
     },
@@ -45,7 +46,7 @@ export const config = {
         if (sizeMB > maxSize) {
             return {
                 valid: false,
-                error: `Video size (${sizeMB.toFixed(1)}MB) exceeds limit of ${maxSize}MB for free tier. Please upload a smaller video.`
+                error: `Video size (${sizeMB.toFixed(1)}MB) exceeds limit of ${maxSize}MB. Please upload a smaller video.`
             };
         }
 

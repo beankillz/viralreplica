@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import confetti from 'canvas-confetti';
+import { useEditorStore } from '../lib/stores/editorStore';
+import { EditorPanel } from '../components/editor/EditorPanel';
+import { ScriptVariation } from '../types/video-processing';
 
 type Step = 'idle' | 'cloning' | 'complete' | 'error';
 
@@ -11,11 +14,6 @@ interface ProcessingState {
   progress: number;
   message: string;
   stage: number;
-}
-
-interface ScriptVariation {
-  name: string;
-  segments: { role: string; text: string; }[];
 }
 
 // Free tier: 10 frames, Paid tier: 20 frames
@@ -69,6 +67,11 @@ export default function Home() {
   const competitorInputRef = useRef<HTMLInputElement>(null);
   const userInputRef = useRef<HTMLInputElement>(null);
 
+  const { project, setProject, isEditing, exitEditor } = useEditorStore();
+  // Access output URL safely from project state
+  const editorOutputUrl = project?.outputVideoUrl;
+  const activeVideoUrl = editorOutputUrl || outputVideoUrl;
+
   // Load font
   useEffect(() => {
     const link = document.createElement('link');
@@ -91,7 +94,7 @@ export default function Home() {
   const validateVideo = (file: File): string | null => {
     const maxSizeBytes = MAX_VIDEO_SIZE_MB * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-      return `Video must be under ${MAX_VIDEO_SIZE_MB}MB (free tier limit)`;
+      return `Video must be under ${MAX_VIDEO_SIZE_MB}MB`;
     }
     if (!file.type.includes('video')) {
       return 'Please upload a video file (MP4, MOV, etc.)';
@@ -200,13 +203,27 @@ export default function Home() {
         throw errJson;
       }
 
-      // Check for Variations Header
+      // Check for Variations and Schema Headers
       const variationsHeader = res.headers.get('X-Variations');
+      const schemaHeader = res.headers.get('X-Schema');
+
+      let parsedVariations: ScriptVariation[] = [];
+      let parsedSchema: any = null;
+
       if (variationsHeader) {
         try {
-          setVariations(JSON.parse(variationsHeader));
+          parsedVariations = JSON.parse(variationsHeader);
+          setVariations(parsedVariations);
         } catch (e) {
           console.warn('Failed to parse variations header');
+        }
+      }
+
+      if (schemaHeader) {
+        try {
+          parsedSchema = JSON.parse(schemaHeader);
+        } catch (e) {
+          console.warn('Failed to parse schema header');
         }
       }
 
@@ -215,11 +232,29 @@ export default function Home() {
       setOutputVideoUrl(url);
       setProcessing({ step: 'complete', progress: 100, message: 'Clone Ready!', stage: PROCESSING_STAGES.length });
 
+      // Initialize Editor Store
+      if (parsedSchema && parsedVariations.length > 0 && userVideo) {
+        setProject({
+          id: Date.now().toString(),
+          createdAt: Date.now(),
+          competitorVideoName: competitorVideo.name,
+          userVideoName: userVideo.name,
+          userVideoUrl: URL.createObjectURL(userVideo),
+          userVideoFile: userVideo, // Pass file for re-rendering
+          topic: topic,
+          visionResults: [], // Not needed for editor
+          variations: parsedVariations,
+          selectedVariationIndex: 0,
+          designSchema: parsedSchema,
+        });
+      }
+
       // Success feedback
       confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.6 },
+        colors: ['#A855F7', '#EC4899', '#ffffff']
       });
       toast.success('🎉 Clone ready! Your viral replica is complete.', { duration: 4000 });
 
@@ -233,41 +268,45 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden font-['Inter']">
-      <Toaster position="top-right" />
+    <div className="min-h-screen relative overflow-hidden font-['Inter'] noise-bg">
+      <Toaster position="top-right" toastOptions={{
+        style: {
+          background: '#18181b',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }
+      }} />
 
       {/* Dynamic Background */}
       <div className="fixed inset-0 z-[-1]">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/30 rounded-full blur-[120px] animate-pulse-slow"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '1.5s' }}></div>
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] animate-pulse-slow"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-20 max-w-5xl">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-20 max-w-5xl relative z-10 w-full xl:max-w-7xl">
 
         {/* Header */}
-        <div className="text-center mb-16 sm:mb-24 animate-fade-in">
-          <h1 className="text-5xl sm:text-7xl font-black mb-4 sm:mb-6 tracking-tight">
-            VIRAL <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent text-glow">REPLICA</span>
+        <div className="text-center mb-16 sm:mb-24 animate-fade-in user-select-none">
+          <h1 className="text-6xl sm:text-8xl font-black mb-6 tracking-tighter hover:scale-[1.02] transition-transform duration-500 cursor-default">
+            VIRAL <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent text-glow bg-[length:200%_auto] animate-liquid-bar">REPLICA</span>
           </h1>
-          <p className="text-lg sm:text-xl text-zinc-400 font-light max-w-2xl mx-auto leading-relaxed">
-            The world's most advanced AI cloner. <br className="hidden sm:block" />
-            Steal the <span className="text-white font-medium">pattern</span>. Keep the <span className="text-white font-medium">vibe</span>.
+          <p className="text-lg sm:text-2xl text-zinc-400 font-light max-w-2xl mx-auto leading-relaxed opacity-90">
+            Steal the <span className="text-white font-medium border-b border-purple-500/50">pattern</span>. Keep the <span className="text-white font-medium border-b border-pink-500/50">vibe</span>.
           </p>
-          <p className="text-xs text-zinc-600 mt-4">💡 Tip: Press <kbd className="px-2 py-1 bg-zinc-800 rounded text-zinc-400">Ctrl+Enter</kbd> to generate</p>
         </div>
 
         {/* Inputs Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-12 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16 animate-slide-up" style={{ animationDelay: '0.2s' }}>
 
           {/* Competitor Upload */}
           <div
             onClick={() => competitorInputRef.current?.click()}
-            className={`glass glass-hover p-1 rounded-3xl cursor-pointer group relative overflow-hidden transition-all duration-500
-              ${competitorVideo ? 'border-purple-500/50 shadow-purple-500/20' : 'border-white/5'}
+            className={`glass glass-hover p-2 rounded-[2rem] cursor-pointer group relative overflow-hidden h-80
+              ${competitorVideo ? 'border-purple-500/50 shadow-[0_0_40px_-10px_rgba(168,85,247,0.3)]' : ''}
             `}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="bg-black/40 rounded-[20px] h-64 flex flex-col items-center justify-center p-6 sm:p-8 text-center relative z-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
+            <div className="bg-black/40 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-black/30">
               <input
                 ref={competitorInputRef}
                 type="file"
@@ -276,18 +315,22 @@ export default function Home() {
                 onChange={(e) => handleCompetitorChange(e.target.files?.[0] || null)}
               />
               {competitorPreview ? (
-                <div className="w-full h-full flex flex-col items-center justify-center">
-                  <video src={competitorPreview} className="max-h-32 rounded-lg mb-2" />
-                  <p className="text-sm text-zinc-400">{competitorVideo?.name}</p>
-                  {competitorDuration && <p className="text-xs text-zinc-600">{competitorDuration.toFixed(1)}s</p>}
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 animate-fade-in">
+                  <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl border border-white/10 group-hover:scale-[1.02] transition-transform duration-500">
+                    <video src={competitorPreview} className="w-full h-full object-cover" muted loop autoPlay onMouseOver={e => e.currentTarget.play()} onMouseOut={e => e.currentTarget.pause()} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium text-white">{competitorVideo?.name}</p>
+                    {competitorDuration && <p className="text-xs text-zinc-500 font-mono">{competitorDuration.toFixed(1)}s</p>}
+                  </div>
                 </div>
               ) : (
                 <>
-                  <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-purple-500 transition-all duration-300 shadow-lg">
-                    <span className="text-2xl">🎯</span>
+                  <div className="w-20 h-20 rounded-full bg-zinc-800/50 border border-white/5 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-purple-500 group-hover:border-purple-400 group-hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] transition-all duration-500">
+                    <span className="text-3xl filter drop-shadow-lg">🎯</span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Target Video</h3>
-                  <p className="text-xs sm:text-sm text-zinc-500">Upload the viral video to replicate</p>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">Target Video</h3>
+                  <p className="text-sm text-zinc-500 max-w-[200px] leading-relaxed group-hover:text-zinc-400">Upload the viral video you want to replicate</p>
                 </>
               )}
             </div>
@@ -296,12 +339,12 @@ export default function Home() {
           {/* User Upload */}
           <div
             onClick={() => userInputRef.current?.click()}
-            className={`glass glass-hover p-1 rounded-3xl cursor-pointer group relative overflow-hidden transition-all duration-500
-              ${userVideo ? 'border-emerald-500/50 shadow-emerald-500/20' : 'border-white/5'}
+            className={`glass glass-hover p-2 rounded-[2rem] cursor-pointer group relative overflow-hidden h-80
+              ${userVideo ? 'border-emerald-500/50 shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)]' : ''}
             `}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="bg-black/40 rounded-[20px] h-64 flex flex-col items-center justify-center p-6 sm:p-8 text-center relative z-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
+            <div className="bg-black/40 rounded-[1.5rem] h-full flex flex-col items-center justify-center p-8 text-center relative z-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-black/30">
               <input
                 ref={userInputRef}
                 type="file"
@@ -310,18 +353,22 @@ export default function Home() {
                 onChange={(e) => handleUserChange(e.target.files?.[0] || null)}
               />
               {userPreview ? (
-                <div className="w-full h-full flex flex-col items-center justify-center">
-                  <video src={userPreview} className="max-h-32 rounded-lg mb-2" />
-                  <p className="text-sm text-zinc-400">{userVideo?.name}</p>
-                  {userDuration && <p className="text-xs text-zinc-600">{userDuration.toFixed(1)}s</p>}
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 animate-fade-in">
+                  <div className="relative w-full flex-1 rounded-xl overflow-hidden shadow-2xl border border-white/10 group-hover:scale-[1.02] transition-transform duration-500">
+                    <video src={userPreview} className="w-full h-full object-cover" muted loop autoPlay onMouseOver={e => e.currentTarget.play()} onMouseOut={e => e.currentTarget.pause()} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium text-white">{userVideo?.name}</p>
+                    {userDuration && <p className="text-xs text-zinc-500 font-mono">{userDuration.toFixed(1)}s</p>}
+                  </div>
                 </div>
               ) : (
                 <>
-                  <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-emerald-500 transition-all duration-300 shadow-lg">
-                    <span className="text-2xl">🎥</span>
+                  <div className="w-20 h-20 rounded-full bg-zinc-800/50 border border-white/5 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:border-emerald-400 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all duration-500">
+                    <span className="text-3xl filter drop-shadow-lg">🎥</span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Your Content</h3>
-                  <p className="text-xs sm:text-sm text-zinc-500">Upload your background footage</p>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-emerald-300 transition-colors">Your Content</h3>
+                  <p className="text-sm text-zinc-500 max-w-[200px] leading-relaxed group-hover:text-zinc-400">Upload your raw background footage</p>
                 </>
               )}
             </div>
@@ -329,52 +376,60 @@ export default function Home() {
         </div>
 
         {/* Topic & Action */}
-        <div className="glass p-6 sm:p-8 rounded-3xl animate-slide-up mb-20 relative max-w-3xl mx-auto" style={{ animationDelay: '0.4s' }}>
-          <div className="flex flex-col md:flex-row gap-6 items-center">
-            <div className="flex-1 w-full">
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3 ml-2">Topic / Niche</label>
+        <div className="glass p-8 rounded-[2rem] animate-slide-up mb-24 relative max-w-4xl mx-auto backdrop-blur-3xl" style={{ animationDelay: '0.4s' }}>
+          <div className="flex flex-col md:flex-row gap-8 items-stretch">
+            <div className="flex-1 w-full space-y-3">
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-widest ml-1">Topic / Niche</label>
               <input
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="e.g. Crypto, Health, Tech..."
-                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg focus:outline-none focus:border-purple-500/50 focus:bg-black/70 transition-all placeholder:text-zinc-700"
+                className="glass-input w-full rounded-2xl px-6 py-5 text-xl font-medium"
               />
             </div>
             <button
               onClick={handleProcess}
               disabled={!competitorVideo || !userVideo || processing.step === 'cloning'}
-              className="w-full md:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-white text-black rounded-xl font-bold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-all shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] mt-6 md:mt-0"
+              className="w-full md:w-auto px-12 py-5 bg-white text-black rounded-2xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_50px_-10px_rgba(255,255,255,0.4)] mt-6 md:mt-0 flex items-center justify-center"
             >
               {processing.step === 'cloning' ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                  <span>PROCESSING</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 border-3 border-black border-t-transparent rounded-full animate-spin"></div>
+                  <span className="tracking-wide">PROCESSING</span>
                 </div>
-              ) : 'GENERATE'}
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span>✨</span>
+                  <span className="tracking-wide">GENERATE</span>
+                </div>
+              )}
             </button>
           </div>
 
           {/* Detailed Progress Bar */}
           {processing.step === 'cloning' && (
-            <div className="mt-6">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-sm text-zinc-400 font-mono">{processing.message}</p>
-                <p className="text-xs text-zinc-600">{Math.round(processing.progress)}%</p>
+            <div className="mt-10 animate-fade-in px-2">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-sm text-zinc-300 font-mono flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                  {processing.message}
+                </p>
+                <p className="text-sm font-bold text-white tabular-nums">{Math.round(processing.progress)}%</p>
               </div>
-              <div className="h-2 bg-black/50 rounded-full overflow-hidden">
+              <div className="h-3 bg-black/40 rounded-full overflow-hidden border border-white/5">
                 <div
-                  className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 transition-all duration-300 rounded-full"
+                  className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 animate-liquid-bar rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)]"
                   style={{ width: `${processing.progress}%` }}
                 ></div>
               </div>
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4 opacity-50">
                 {PROCESSING_STAGES.map((stage, idx) => (
                   <div
                     key={idx}
-                    className={`flex-1 h-1 rounded-full transition-all ${idx < processing.stage ? 'bg-purple-500' :
-                      idx === processing.stage ? 'bg-purple-500/50' :
-                        'bg-zinc-800'
+                    className={`flex-1 h-1 rounded-full transition-all duration-500 ${idx < processing.stage ? 'bg-white' :
+                      idx === processing.stage ? 'bg-white/50' :
+                        'bg-white/10'
                       }`}
                   ></div>
                 ))}
@@ -385,50 +440,93 @@ export default function Home() {
 
         {/* Error State */}
         {error && (
-          <div className="max-w-3xl mx-auto mb-12 animate-fade-in glass border-red-500/30 bg-red-500/5 p-6 rounded-2xl text-center">
-            <p className="text-red-400 font-medium text-base sm:text-lg">{error}</p>
+          <div className="max-w-3xl mx-auto mb-12 animate-fade-in glass border-red-500/30 bg-red-500/10 p-6 rounded-3xl text-center backdrop-blur-md">
+            <span className="text-3xl block mb-2">⚠️</span>
+            <p className="text-red-300 font-medium text-lg">{error}</p>
           </div>
         )}
 
         {/* Results */}
-        {processing.step === 'complete' && outputVideoUrl && (
-          <div className="animate-slide-up space-y-12">
+        {processing.step === 'complete' && activeVideoUrl && (
+          <div className="animate-slide-up space-y-16">
             <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
 
-            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-8">Ready to <span className="text-purple-400">Viral</span></h2>
+            <div className={`flex flex-col lg:flex-row gap-8 ${isEditing ? 'h-[85vh]' : ''}`}>
 
-            <div className="glass p-2 rounded-[32px] max-w-5xl mx-auto relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-[32px] blur-xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
-              <div className="relative rounded-[30px] overflow-hidden bg-black aspect-video shadow-2xl">
-                <video src={outputVideoUrl} controls autoPlay muted className="w-full h-full object-contain" />
+              {/* Editor Panel - Only show when editing */}
+              {isEditing && (
+                <div className="w-full lg:w-[450px] animate-fade-in flex-shrink-0">
+                  <EditorPanel />
+                </div>
+              )}
+
+              {/* Video Player */}
+              <div className={`glass p-3 rounded-[2.5rem] mx-auto relative group transition-all duration-700
+                    ${isEditing ? 'flex-1 bg-black/40 border-white/5' : 'max-w-6xl'}
+                `}>
+                {!isEditing && <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-[2.5rem] blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700"></div>}
+                <div className={`relative rounded-[2rem] overflow-hidden bg-black shadow-2xl w-full flex items-center justify-center
+                     ${isEditing ? 'h-full bg-[url("/grid-pattern.svg")]' : 'aspect-video'}
+                  `}>
+                  <video
+                    key={activeVideoUrl} // Force reload on url change
+                    src={activeVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className={`${isEditing ? 'max-h-full max-w-full' : 'w-full h-full'} object-contain drop-shadow-2xl`}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <a
-                href={outputVideoUrl}
-                download="viral-replica.mp4"
-                className="px-8 sm:px-12 py-3 sm:py-4 bg-white text-black rounded-full font-bold text-base sm:text-lg hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all flex items-center gap-3"
-              >
-                <span>⬇️</span> Download Replica
-              </a>
-            </div>
+            {!isEditing && (
+              <div className="flex flex-col sm:flex-row justify-center gap-6">
+                <a
+                  href={activeVideoUrl}
+                  download="viral-replica.mp4"
+                  className="px-10 py-4 bg-white text-black rounded-full font-bold text-lg hover:scale-105 hover:bg-zinc-100 transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_-5px_rgba(255,255,255,0.3)] transform active:scale-95"
+                >
+                  <span>⬇️</span> Download Replica
+                </a>
+                {/* Edit Button */}
+                {project && (
+                  <button
+                    onClick={() => setProject({ ...project })}
+                    className="px-10 py-4 glass bg-white/5 text-white border-white/20 rounded-full font-bold text-lg hover:scale-105 hover:bg-white/10 hover:border-white/40 transition-all flex items-center justify-center gap-3 backdrop-blur-md transform active:scale-95"
+                  >
+                    <span>🎨</span> Customize Design
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Variations */}
             {variations.length > 0 && (
-              <div className="mt-24">
-                <h3 className="text-xl sm:text-2xl font-bold text-center mb-10 text-zinc-500">Generated Variations</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="mt-32">
+                <div className="flex items-center justify-center gap-4 mb-16 opacity-80">
+                  <div className="h-px w-24 bg-gradient-to-r from-transparent to-white/20"></div>
+                  <h3 className="text-2xl font-bold text-zinc-400">AI Generated Variations</h3>
+                  <div className="h-px w-24 bg-gradient-to-l from-transparent to-white/20"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   {variations.map((v, i) => (
-                    <div key={i} className="glass p-6 sm:p-8 rounded-3xl hover:bg-white/10 transition-colors">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">{i + 1}</div>
-                        <h4 className="font-bold text-purple-300 text-sm sm:text-base">{v.name}</h4>
+                    <div key={i} className="glass group p-8 rounded-[2rem] hover:bg-white/5 transition-all duration-500 hover:-translate-y-2 border border-white/5 hover:border-purple-500/30">
+                      <div className="flex items-center gap-4 mb-8">
+                        <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm font-bold text-white group-hover:bg-purple-500 group-hover:border-purple-400 transition-colors shadow-lg">
+                          {i + 1}
+                        </div>
+                        <h4 className="font-bold text-zinc-200 text-lg group-hover:text-purple-300 transition-colors">{v.name}</h4>
                       </div>
-                      <div className="space-y-4">
+                      <div className="space-y-6">
                         {v.segments.map((seg, j) => (
-                          <div key={j} className="text-xs sm:text-sm text-zinc-400 leading-relaxed border-l-2 border-white/5 pl-4">
-                            {seg.text}
+                          <div key={j} className="relative pl-6">
+                            <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-white/10 group-hover:bg-purple-500/30 transition-colors"></div>
+                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1 block">{seg.role}</span>
+                            <p className="text-sm text-zinc-300 leading-relaxed font-light">
+                              {seg.text}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -440,8 +538,8 @@ export default function Home() {
           </div>
         )}
 
-        <footer className="mt-32 text-center text-zinc-700 text-xs sm:text-sm">
-          Viral Replica AI • {new Date().getFullYear()}
+        <footer className="mt-40 text-center text-zinc-700 text-sm font-medium opacity-50 hover:opacity-100 transition-opacity">
+          VIRAL REPLICA AI • {new Date().getFullYear()}
         </footer>
 
       </main>

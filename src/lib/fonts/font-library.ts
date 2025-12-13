@@ -21,11 +21,27 @@ export const FONT_LIBRARY = [
 
     // System Fonts (Fallbacks)
     'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Verdana', 'Courier New',
-    'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Tahoma'
+    'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Tahoma',
+
+    // Global / Multi-Language Support
+    'Noto Sans',
+    'Noto Sans Arabic',
+    'Noto Sans JP',        // Japanese
+    'Noto Sans KR',        // Korean
+    'Noto Sans SC',        // Simplified Chinese
+    'Noto Sans TC',        // Traditional Chinese
+    'Noto Sans Hebrew',
+    'Noto Sans Thai'
 ];
 
 export const FONT_CATEGORIES = {
-    'sans-serif': ['Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Raleway', 'Nunito', 'Ubuntu', 'Work Sans', 'Rubik', 'Noto Sans', 'PT Sans', 'Source Sans Pro', 'Oswald', 'Quicksand', 'Barlow', 'Oxygen', 'Mulish', 'Manrope', 'DM Sans', 'Outfit', 'Plus Jakarta Sans', 'Space Grotesk'],
+    'sans-serif': [
+        'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Raleway', 'Nunito', 'Ubuntu',
+        'Work Sans', 'Rubik', 'Noto Sans', 'PT Sans', 'Source Sans Pro', 'Oswald', 'Quicksand', 'Barlow',
+        'Oxygen', 'Mulish', 'Manrope', 'DM Sans', 'Outfit', 'Plus Jakarta Sans', 'Space Grotesk',
+        // Global
+        'Noto Sans', 'Noto Sans Arabic', 'Noto Sans JP', 'Noto Sans KR', 'Noto Sans SC', 'Noto Sans TC', 'Noto Sans Hebrew', 'Noto Sans Thai'
+    ],
     'serif': ['Playfair Display', 'Merriweather', 'Lora', 'PT Serif', 'Crimson Text', 'Libre Baskerville', 'Bitter', 'Arvo', 'Cormorant', 'EB Garamond'],
     'display': ['Bebas Neue', 'Righteous', 'Pacifico', 'Lobster', 'Dancing Script', 'Permanent Marker', 'Fredoka One', 'Anton', 'Archivo Black', 'Bangers'],
     'monospace': ['Roboto Mono', 'Source Code Pro', 'Fira Code', 'JetBrains Mono', 'Inconsolata']

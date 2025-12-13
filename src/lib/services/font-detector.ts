@@ -11,7 +11,8 @@ export class FontDetectorService {
      */
     async detectFont(
         geminiHint: string,
-        characteristics?: Partial<FontCharacteristics>
+        characteristics?: Partial<FontCharacteristics>,
+        language?: string
     ): Promise<FontInfo> {
 
         // Strategy 1: Direct match from Gemini hint
@@ -20,13 +21,19 @@ export class FontDetectorService {
             return directMatch;
         }
 
-        // Strategy 2: Fuzzy matching with characteristics
+        // Strategy 2: Fuzzy matching
         const fuzzyMatch = this.fuzzyMatch(geminiHint, characteristics);
         if (fuzzyMatch && fuzzyMatch.confidence > 0.6) {
             return fuzzyMatch;
         }
 
-        // Strategy 3: Category-based fallback
+        // Strategy 3: Language-based fallback (Crucial for Non-Latin)
+        if (language) {
+            const langFont = this.getLanguageFallback(language, characteristics);
+            if (langFont) return langFont;
+        }
+
+        // Strategy 4: Category-based fallback
         return this.getCategoryFallback(characteristics);
     }
 
@@ -186,6 +193,66 @@ export class FontDetectorService {
     private extractStyle(hint: string): 'normal' | 'italic' {
         const lower = hint.toLowerCase();
         return lower.includes('italic') || lower.includes('oblique') ? 'italic' : 'normal';
+    }
+
+    /**
+     * Get font based on detected language
+     */
+    private getLanguageFallback(language: string, characteristics?: Partial<FontCharacteristics>): FontInfo | null {
+        const lang = language.toLowerCase().split('-')[0]; // Extract primary 'zh', 'ar' etc
+
+        const weight = characteristics?.weight || 400;
+        const style = characteristics?.slant && characteristics.slant > 0 ? 'italic' : 'normal';
+
+        let family = null;
+
+        switch (lang) {
+            case 'ar': // Arabic
+                family = 'Noto Sans Arabic';
+                break;
+            case 'ja': // Japanese
+                family = 'Noto Sans JP';
+                break;
+            case 'ko': // Korean
+                family = 'Noto Sans KR';
+                break;
+            case 'zh': // Chinese
+                // Simple heuristic for simplified vs traditional if code is just 'zh' (default SC)
+                // If full code was zh-TW or zh-HK, we handles it via checking language input before split? 
+                // Let's check original input
+                if (language.toLowerCase().includes('tw') || language.toLowerCase().includes('hk')) {
+                    family = 'Noto Sans TC';
+                } else {
+                    family = 'Noto Sans SC';
+                }
+                break;
+            case 'he': // Hebrew
+                family = 'Noto Sans Hebrew';
+                break;
+            case 'th': // Thai
+                family = 'Noto Sans Thai';
+                break;
+            case 'ru': // Russian (Cyrillic)
+            case 'uk': // Ukrainian
+            case 'bg': // Bulgarian
+            case 'be': // Belarusian
+                // Noto Sans or Inter covers Cyrillic well, but let's be explicit if we want
+                // stick to default Noto Sans for now as it includes Cyrillic
+                family = 'Noto Sans';
+                break;
+        }
+
+        if (family) {
+            return {
+                family,
+                weight,
+                style,
+                category: 'sans-serif',
+                confidence: 0.9 // High confidence for language match
+            };
+        }
+
+        return null;
     }
 
     /**
