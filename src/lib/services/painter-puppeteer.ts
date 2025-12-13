@@ -4,11 +4,13 @@ import chromium from '@sparticuz/chromium';
 import { TextOverlay } from '../../types/video-processing';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 export class PainterService {
 

@@ -49,10 +49,23 @@ export async function POST(request: NextRequest) {
 
         // --- STEP 1: FRAME EXTRACTION ---
         console.log('Extracting frames...');
-        const frameSettings = config.getFrameSettings();
+
+        // Smart Frame Sampling
+        const duration = await frameExtractor.getVideoDuration(tempCompetitorPath);
+        console.log(`[Pipeline] Video duration: ${duration.toFixed(1)}s`);
+
+        let fps = 1; // Default 1 FPS
+        if (duration > 60) {
+            // If longer than 60s, adjust FPS to get approx 60 frames total
+            fps = 60 / duration;
+            console.log(`[Pipeline] Long video detected (>60s). Throttling FPS to ${fps.toFixed(2)} to target 60 frames.`);
+        } else {
+            console.log(`[Pipeline] Short video (<=60s). Using 1 FPS.`);
+        }
+
         const frames = await frameExtractor.extractFrames(tempCompetitorPath, {
-            fps: frameSettings.fps,
-            maxFrames: frameSettings.maxFrames
+            fps: fps,
+            maxFrames: 60 // Cap at 60 just in case
         });
 
         // --- STEP 2: EFFICIENT PIPELINE (Vision + Aggregation + Intelligence) ---

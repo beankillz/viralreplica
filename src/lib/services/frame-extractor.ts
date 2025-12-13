@@ -1,5 +1,6 @@
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -7,6 +8,7 @@ import { Frame, ExtractionOptions } from '../../types/video-processing';
 
 // Ensure FFmpeg path is set
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 export class FrameExtractorService {
     /**
@@ -60,6 +62,18 @@ export class FrameExtractorService {
         } finally {
             await this.cleanup(workDir);
         }
+    }
+
+    /**
+     * Get video duration in seconds
+     */
+    async getVideoDuration(videoPath: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            ffmpeg.ffprobe(videoPath, (err, metadata) => {
+                if (err) return reject(err);
+                resolve(metadata.format.duration || 0);
+            });
+        });
     }
 
     private async createTempDir(): Promise<string> {
