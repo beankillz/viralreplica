@@ -27,11 +27,34 @@ export class PipelineOrchestrator {
         console.log(`[Pipeline] Aggregated into ${consolidated.length} text instances`);
 
         // 3. Structural Intelligence (Groq Parallel)
-        const [layoutMap, roleMap, designSystem] = await Promise.all([
+        const [layoutMap, roleMap, rawDesignSystem] = await Promise.all([
             structureAnalyzer.analyzeLayout(consolidated),
             structureAnalyzer.classifyRoles(consolidated),
             structureAnalyzer.generateDesignSystem(consolidated)
         ]);
+
+        // Ensure DesignSystem has robust defaults
+        const designSystem = {
+            fonts: {
+                primary: rawDesignSystem?.fonts?.primary || 'Inter',
+                secondary: rawDesignSystem?.fonts?.secondary || 'Inter',
+            },
+            colors: {
+                primary: rawDesignSystem?.colors?.primary || '#ffffff',
+                secondary: rawDesignSystem?.colors?.secondary || '#000000',
+                accent: rawDesignSystem?.colors?.accent || '#FF0000',
+                background: rawDesignSystem?.colors?.background || '#000000',
+                text: rawDesignSystem?.colors?.text || '#ffffff',
+            },
+            spacing: {
+                base: rawDesignSystem?.spacing?.base || 4,
+                scale: rawDesignSystem?.spacing?.scale || [4, 8, 16, 24, 32],
+            },
+            timing: {
+                avgDurationPerWord: rawDesignSystem?.timing?.avgDurationPerWord || 0.4,
+                minDuration: rawDesignSystem?.timing?.minDuration || 1.0,
+            }
+        };
 
         // 4. Enrich Overlays
         const enrichedOverlays: EnrichedOverlay[] = consolidated.map(c => {
