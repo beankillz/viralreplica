@@ -18,10 +18,13 @@ export class PainterService {
         // Determine environment
         const isLocal = !process.env.AWS_LAMBDA_FUNCTION_VERSION;
 
-        // Local Chrome paths (Windows)
+        // Local Chrome paths (Windows & Linux)
         const localChromePaths = [
             'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
             'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            '/usr/bin/chromium',
+            '/usr/bin/google-chrome',
+            '/run/current-system/sw/bin/chromium', // NixOS/Nixpacks default
             process.env.CHROME_EXECUTABLE_PATH // allow override
         ];
 
