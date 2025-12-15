@@ -11,7 +11,7 @@ export async function GET() {
             });
         }
 
-        console.log('Testing Qwen (OpenRouter) with API key:', apiKey.substring(0, 10) + '...');
+        console.log('Testing Model (OpenRouter) with API key:', apiKey.substring(0, 10) + '...');
 
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -22,7 +22,7 @@ export async function GET() {
                 'X-Title': 'Viral Replica Test'
             },
             body: JSON.stringify({
-                model: 'qwen/qwen-2.5-72b-instruct', // Using a fast, smart text model for quick check
+                model: 'nvidia/nemotron-nano-12b-v2-vl:free', // Using the user-requested model
                 messages: [
                     { role: 'user', content: 'Say "hello" in one word.' }
                 ],
@@ -39,13 +39,13 @@ export async function GET() {
 
         return NextResponse.json({
             success: true,
-            message: 'Qwen (OpenRouter) API working!',
+            message: 'Model (OpenRouter) API working!',
             response: content,
             model: data.model
         });
 
     } catch (error) {
-        console.error('Qwen test error:', error);
+        console.error('Model test error:', error);
         return NextResponse.json({
             success: false,
             error: String(error),

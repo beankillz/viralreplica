@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
         // --- STEP 2: EFFICIENT PIPELINE (Vision + Aggregation + Intelligence) ---
         console.log('Running Efficient AI Pipeline...');
-        const pipelineResult = await pipelineOrchestrator.processVideo(frames, fps);
+        const pipelineResult = await pipelineOrchestrator.processVideo(frames, frameSettings.fps);
 
         // --- STEP 3: DATA MAPPING (Pipeline Result -> Legacy Types) ---
 

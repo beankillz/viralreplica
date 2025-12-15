@@ -6,7 +6,7 @@ import {
     ConsolidatedTextInstance
 } from '../../types/pipeline';
 
-const MODEL_NAME = 'qwen/qwen3-vl-8b-instruct'; // User requested model via OpenRouter
+const MODEL_NAME = 'nvidia/nemotron-nano-12b-v2-vl:free'; // User requested model via OpenRouter
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // --- Prompts from User ---
