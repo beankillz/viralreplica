@@ -54,18 +54,22 @@ export async function POST(request: NextRequest) {
         const duration = await frameExtractor.getVideoDuration(tempCompetitorPath);
         console.log(`[Pipeline] Video duration: ${duration.toFixed(1)}s`);
 
-        let fps = 1; // Default 1 FPS
+        let fps = 2; // Default 2 FPS for better text detection
         if (duration > 60) {
-            // If longer than 60s, adjust FPS to get approx 60 frames total
-            fps = 60 / duration;
-            console.log(`[Pipeline] Long video detected (>60s). Throttling FPS to ${fps.toFixed(2)} to target 60 frames.`);
+            // If longer than 60s, adjust FPS to get approx 120 frames total
+            fps = Math.min(3, 120 / duration);
+            console.log(`[Pipeline] Long video detected (>60s). Throttling FPS to ${fps.toFixed(2)} to target 120 frames.`);
+        } else if (duration > 20) {
+            fps = 2; // Medium videos: 2 FPS
+            console.log(`[Pipeline] Medium video (20-60s). Using 2 FPS.`);
         } else {
-            console.log(`[Pipeline] Short video (<=60s). Using 1 FPS.`);
+            fps = 3; // Short videos: 3 FPS for maximum accuracy
+            console.log(`[Pipeline] Short video (<20s). Using 3 FPS for maximum text detection.`);
         }
 
         const frames = await frameExtractor.extractFrames(tempCompetitorPath, {
             fps: fps,
-            maxFrames: 60 // Cap at 60 just in case
+            maxFrames: 120 // Increased cap to allow more frames
         });
 
         // --- STEP 2: EFFICIENT PIPELINE (Vision + Aggregation + Intelligence) ---

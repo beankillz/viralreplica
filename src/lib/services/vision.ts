@@ -218,8 +218,8 @@ export class VisionService {
     private async optimizeImage(base64: string): Promise<string> {
         const buffer = Buffer.from(base64, 'base64');
         const resized = await sharp(buffer)
-            .resize(1024, null, { withoutEnlargement: true })
-            .jpeg({ quality: 85 })
+            .resize(1920, null, { withoutEnlargement: true })
+            .jpeg({ quality: 95 })
             .toBuffer();
         return resized.toString('base64');
     }
