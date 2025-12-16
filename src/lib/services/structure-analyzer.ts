@@ -11,17 +11,17 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // --- Prompts from User ---
 
-const SYSTEM_PROMPT_LAYOUT = `You are a layout-reasoning AI that converts pixel positions into responsive design logic.`;
+const SYSTEM_PROMPT_LAYOUT = `You are a layout-reasoning AI. STRICT JSON ONLY. NO HALLUCINATIONS.`;
 const USER_PROMPT_LAYOUT = `For each overlay, determine:
 Anchor position (top, center, bottom)
 Horizontal alignment (left, center, right)
 Padding (top, right, bottom, left)
 Margin from screen edges
 Z-index / layering order
-Normalize all values so they adapt to different video resolutions.
+Normalize all values.
 Output JSON only.`;
 
-const SYSTEM_PROMPT_ROLE = `You are an AI that understands short-form video storytelling.`;
+const SYSTEM_PROMPT_ROLE = `You are a video storytelling AI. STRICT JSON ONLY. NO HALLUCINATIONS.`;
 const USER_PROMPT_ROLE = `Classify each text overlay into one role:
 HOOK
 BODY
@@ -29,10 +29,9 @@ CTA
 
 Rules:
 Each overlay must have exactly one role
-Base classification on timing, wording, and position
 Output JSON only`;
 
-const SYSTEM_PROMPT_DESIGN = `You are a design-system AI.`;
+const SYSTEM_PROMPT_DESIGN = `You are a design-system AI. STRICT JSON ONLY.`;
 const USER_PROMPT_DESIGN = `From all extracted overlays, generate reusable design tokens:
 Font tokens
 Color palette
@@ -40,8 +39,6 @@ Spacing scale
 Timing presets
 
 Rules:
-Tokens must be reusable across videos
-No duplication
 Output JSON only`;
 
 const SYSTEM_PROMPT_VARIATION = `You generate text variations without altering design or timing.`;
@@ -175,6 +172,7 @@ export class StructureAnalyzerService {
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userContent }
                     ],
+                    max_tokens: 2048, // Prevent massive hallucinations
                     temperature: 0.1, // Low temp for structured tasks
                     response_format: { type: 'json_object' }
                 })

@@ -7,11 +7,9 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // User-provided System Prompt for Vision Phase
 const SYSTEM_PROMPT = `
-You are a vision-language AI specialized in reading and normalizing text from video frames with high precision.
-You must extract only what is visible. Do not infer missing text.
-
-You are also a visual design analysis AI.
-You infer typography and styling from rendered text.
+You are a vision-language AI specialized in reading and normalizing text from video frames.
+STRICT JSON OUTPUT ONLY. DO NOT HALLUCINATE.
+If no text is visible, return empty arrays.
 `;
 
 const USER_PROMPT_TEXT = `
@@ -139,7 +137,7 @@ export class VisionService {
                 body: JSON.stringify({
                     model: VISION_MODEL_NAME,
                     messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
+                        { role: 'system', content: SYSTEM_PROMPT + "\nIMPORTANT: RETURN JSON ONLY. NO MARKDOWN. NO EXPLANATIONS. MAX LENGTH 1000 CHARS." },
                         {
                             role: 'user',
                             content: [
@@ -148,6 +146,8 @@ export class VisionService {
                             ]
                         }
                     ],
+                    max_tokens: 2048, // Hard limit to prevent 130k+ char hallucinations
+                    temperature: 0.1, // Low temp for precision
                     response_format: { type: 'json_object' },
                     provider: { sort: 'price' }
                 })
@@ -161,7 +161,13 @@ export class VisionService {
             const content = data.choices?.[0]?.message?.content;
             if (!content) throw new Error('No content');
 
-            const parsed = JSON.parse(content);
+            let parsed;
+            try {
+                parsed = JSON.parse(content);
+            } catch (jsonError) {
+                console.error("Invalid JSON received (first 200 chars):", content.substring(0, 200));
+                throw new Error("Invalid JSON response from model");
+            }
             const detections: RawTextDetection[] = (parsed.detections || []).map((d: any) => ({
                 text: d.text,
                 frameIndex: index,
