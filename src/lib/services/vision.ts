@@ -163,7 +163,9 @@ export class VisionService {
 
             let parsed;
             try {
-                parsed = JSON.parse(content);
+                // Sanitize content: remove ```json and ``` blocks if present
+                const cleanContent = content.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+                parsed = JSON.parse(cleanContent);
             } catch (jsonError) {
                 console.error("Invalid JSON received (first 200 chars):", content.substring(0, 200));
                 throw new Error("Invalid JSON response from model");

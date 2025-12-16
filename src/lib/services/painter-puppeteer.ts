@@ -1,6 +1,5 @@
 
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer';
 import { TextOverlay } from '../../types/video-processing';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
@@ -15,39 +14,12 @@ ffmpeg.setFfprobePath(ffprobeInstaller.path);
 export class PainterService {
 
     private async getBrowser() {
-        // Determine environment
-        const isLocal = !process.env.AWS_LAMBDA_FUNCTION_VERSION;
-
-        // Local Chrome paths (Windows & Linux)
-        // Local Chrome paths (Windows & Linux)
-        const localChromePaths = [
-            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-            path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'), // User-level install
-            '/usr/bin/chromium',
-            '/usr/bin/google-chrome',
-            '/run/current-system/sw/bin/chromium',
-            process.env.CHROME_EXECUTABLE_PATH
-        ].filter(Boolean) as string[];
-
-        const executablePath = isLocal
-            ? localChromePaths.find(p => require('fs').existsSync(p))
-            : await chromium.executablePath();
-
-        if (isLocal && !executablePath) {
-            console.error('Tried paths:', localChromePaths);
-            throw new Error(`Local Chrome not found in standard locations. Please install Chrome or set CHROME_EXECUTABLE_PATH.`);
-        }
-
         return await puppeteer.launch({
-            args: isLocal ? puppeteer.defaultArgs() : [
-                ...chromium.args,
+            args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox'
             ],
-            defaultViewport: (chromium as any).defaultViewport,
-            executablePath: executablePath as string,
-            headless: (chromium as any).headless,
+            headless: true
         });
     }
 
