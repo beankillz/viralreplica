@@ -64,26 +64,59 @@ export class VisionService {
 
     async analyzeVideoFrames(frames: { base64: string; timestamp: number }[]): Promise<RawFrameAnalysis[]> {
         const results: RawFrameAnalysis[] = [];
+        const BATCH_SIZE = 3;
 
-        for (let i = 0; i < frames.length; i++) {
-            // Rate limiting: 2 seconds to be safe
-            if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+        for (let i = 0; i < frames.length; i += BATCH_SIZE) {
+            const batch = frames.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(async (frame, batchIndex) => {
+                const globalIndex = i + batchIndex;
 
-            try {
-                const result = await this.analyzeFrame(frames[i], i);
-                results.push(result);
-            } catch (error) {
-                console.error(`Failed to analyze frame ${i}:`, error);
-                // Return empty result on failure to keep pipeline moving
-                results.push({
-                    frameIndex: i,
-                    timestamp: frames[i].timestamp,
+                // Retry logic
+                let attempts = 0;
+                const maxAttempts = 3;
+
+                while (attempts < maxAttempts) {
+                    try {
+                        return await this.analyzeFrame(frame, globalIndex);
+                    } catch (error: any) {
+                        attempts++;
+                        console.warn(`Frame ${globalIndex} analysis failed (Attempt ${attempts}/${maxAttempts}):`, error.message);
+
+                        if (attempts === maxAttempts) {
+                            console.error(`Frame ${globalIndex} failed after ${maxAttempts} attempts.`);
+                            // Return empty result on final failure
+                            return {
+                                frameIndex: globalIndex,
+                                timestamp: frame.timestamp,
+                                detections: [],
+                                visuals: { typography: {}, styling: {} }
+                            };
+                        }
+
+                        // Exponential backoff: 1s, 2s, 4s
+                        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts - 1)));
+                    }
+                }
+                // Should not be reached due to return in loop, but for type safety:
+                return {
+                    frameIndex: globalIndex,
+                    timestamp: frame.timestamp,
                     detections: [],
                     visuals: { typography: {}, styling: {} }
-                });
+                };
+            });
+
+            console.log(`Processing batch ${i / BATCH_SIZE + 1} (${batch.length} frames)...`);
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+
+            // Small delay between batches to avoid completely hammering the API
+            if (i + BATCH_SIZE < frames.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        return results;
+
+        return results.sort((a, b) => a.frameIndex - b.frameIndex);
     }
 
     async analyzeFrame(frame: { base64: string; timestamp: number }, index: number): Promise<RawFrameAnalysis> {
