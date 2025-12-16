@@ -184,7 +184,11 @@ export class StructureAnalyzerService {
             }
 
             const data = await response.json();
-            return data.choices?.[0]?.message?.content || '{}';
+            const content = data.choices?.[0]?.message?.content || '{}';
+
+            // Sanitize content: remove ```json and ``` blocks if present
+            const cleanContent = content.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+            return cleanContent;
 
         } catch (error) {
             console.error('OpenRouter Analysis Failed:', error);
