@@ -32,7 +32,7 @@ async function testPipeline() {
         console.log('   Analysis complete.');
         console.log(`   Detected ${pipelineResult.overlays.length} overlays.`);
 
-        if (pipelineResult.warnings.length > 0) {
+        if (pipelineResult.warnings && pipelineResult.warnings.length > 0) {
             console.log('   Warnings:', pipelineResult.warnings);
         }
 
