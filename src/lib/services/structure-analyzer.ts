@@ -71,7 +71,14 @@ export class StructureAnalyzerService {
             USER_PROMPT_LAYOUT + "\n\nInput Data:\n" + JSON.stringify(input)
         );
 
-        const results = JSON.parse(response);
+        let results;
+        try {
+            results = JSON.parse(response);
+        } catch (err) {
+            console.error("Failed to parse layout response, using empty map:", err);
+            return new Map<string, LayoutLogic>();
+        }
+
         const layoutMap = new Map<string, LayoutLogic>();
 
         // Handle input as array or object with array
@@ -106,7 +113,14 @@ export class StructureAnalyzerService {
             USER_PROMPT_ROLE + "\n\nInput Data:\n" + JSON.stringify(input)
         );
 
-        const results = JSON.parse(response);
+        let results;
+        try {
+            results = JSON.parse(response);
+        } catch (err) {
+            console.error("Failed to parse role classification response, using empty map:", err);
+            return new Map<string, TextRole>();
+        }
+
         const roleMap = new Map<string, TextRole>();
 
         const items = Array.isArray(results) ? results : (results.classifications || []);
@@ -131,7 +145,18 @@ export class StructureAnalyzerService {
             USER_PROMPT_DESIGN + "\n\nInput Data:\n" + JSON.stringify(input)
         );
 
-        return JSON.parse(response) as DesignSystem;
+        try {
+            return JSON.parse(response) as DesignSystem;
+        } catch (err) {
+            console.error("Failed to parse design system response, using defaults:", err);
+            // Return sensible defaults
+            return {
+                fonts: { primary: 'Inter', secondary: 'Arial' },
+                colors: { text: '#ffffff', background: '#000000', accent: '#0080ff' },
+                spacing: { base: 8, scale: 1.5 },
+                timing: { default: 3000, hook: 2000, cta: 4000 }
+            };
+        }
     }
 
     async generateVariations(hooksAndCtas: { id: string, text: string, role: string }[]): Promise<Map<string, string[]>> {
@@ -142,7 +167,14 @@ export class StructureAnalyzerService {
             USER_PROMPT_VARIATION + "\n\nInput Data:\n" + JSON.stringify(hooksAndCtas)
         );
 
-        const results = JSON.parse(response);
+        let results;
+        try {
+            results = JSON.parse(response);
+        } catch (err) {
+            console.error("Failed to parse variation response, using empty map:", err);
+            return new Map<string, string[]>();
+        }
+
         const variationMap = new Map<string, string[]>();
 
         const items = Array.isArray(results) ? results : (results.variations || []);

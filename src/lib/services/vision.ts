@@ -164,11 +164,40 @@ export class VisionService {
             let parsed;
             try {
                 // Sanitize content: remove ```json and ``` blocks if present
-                const cleanContent = content.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+                let cleanContent = content.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+
+                // Try to repair common JSON errors
+                // 1. Fix unterminated strings by closing them
+                const openQuotes = (cleanContent.match(/"/g) || []).length;
+                if (openQuotes % 2 !== 0) {
+                    // Odd number of quotes = unterminated string
+                    cleanContent += '"';
+                }
+
+                // 2. Fix missing closing braces/brackets
+                const openBraces = (cleanContent.match(/\{/g) || []).length;
+                const closeBraces = (cleanContent.match(/\}/g) || []).length;
+                if (openBraces > closeBraces) {
+                    cleanContent += '}'.repeat(openBraces - closeBraces);
+                }
+
+                const openBrackets = (cleanContent.match(/\[/g) || []).length;
+                const closeBrackets = (cleanContent.match(/\]/g) || []).length;
+                if (openBrackets > closeBrackets) {
+                    cleanContent += ']'.repeat(openBrackets - closeBrackets);
+                }
+
                 parsed = JSON.parse(cleanContent);
             } catch (jsonError) {
-                console.error("Invalid JSON received (first 200 chars):", content.substring(0, 200));
-                throw new Error("Invalid JSON response from model");
+                console.error("Invalid JSON received (first 300 chars):", content.substring(0, 300));
+                console.error("JSON Error:", jsonError);
+                // Return empty result instead of crashing
+                return {
+                    frameIndex: index,
+                    timestamp: frame.timestamp,
+                    detections: [],
+                    visuals: { typography: {}, styling: {} }
+                };
             }
             const detections: RawTextDetection[] = (parsed.detections || []).map((d: any) => ({
                 text: d.text,
