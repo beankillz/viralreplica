@@ -7,29 +7,32 @@ export const overlayMapper = {
         defaultSchema: DesignSchema
     ): TextOverlay[] {
         return segments.map(seg => {
-            // Calculate center from bounding box if available
-            let position = { x: 50, y: 50 }; // Default center
-            if (seg.boundingBox) {
-                position = {
-                    x: seg.boundingBox.x + (seg.boundingBox.width / 2),
-                    y: seg.boundingBox.y + (seg.boundingBox.height / 2)
-                };
+            // Smart center-based positioning based on role
+            // Competitor's bounding box doesn't apply to user's video
+            let position = { x: 50, y: 50 }; // Default: center
+
+            // Role-based smart positioning
+            if (seg.role) {
+                switch (seg.role.toLowerCase()) {
+                    case 'hook':
+                        position = { x: 50, y: 20 }; // Top-center
+                        break;
+                    case 'cta':
+                        position = { x: 50, y: 80 }; // Bottom-center
+                        break;
+                    case 'body':
+                    default:
+                        position = { x: 50, y: 50 }; // Center
+                        break;
+                }
             }
 
             // Merge dominant style with specific segment style
             const styleToUse = seg.style || defaultSchema;
 
-            // Heuristic for font size: 80% of bounding box height in vh, or default 40px
-            // If the user has manually set a font size in the schema, we might want to respect it.
-            // But for now, let's keep the bounding box logic as the default "smart" sizing 
-            // unless we add specific "manual override" flags later. 
-            // Actually, if 'fontSize' is present in styleToUse, we should probably prefer it if it looks like a manual setting.
-            // For now, I'll stick to the original logic but check if styleToUse has a specific override.
-
-            let fontSize = styleToUse.fontSize || '40px';
-            if (!styleToUse.fontSize && seg.boundingBox) {
-                fontSize = `${seg.boundingBox.height * 0.8}vh`;
-            }
+            // Use safe, visible font size
+            // Default to 48px (good visibility), or respect manual override
+            let fontSize = styleToUse.fontSize || '48px';
 
             return {
                 text: seg.text,
