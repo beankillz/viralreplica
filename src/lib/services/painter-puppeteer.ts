@@ -77,20 +77,7 @@ export class PainterService {
                 `;
             }
 
-            // Sanitize text to remove emoji and high-value Unicode characters
-            // that cause ByteString conversion errors (values > 255)
-            const sanitizeText = (text: string) => {
-                // Replace emoji and special Unicode with empty string or placeholder
-                return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/gu, '')
-                    .replace(/[^\x00-\xFF]/g, '?') // Replace any char > 255 with '?'
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
-            };
-
-            return `<div style="${style}">${sanitizeText(o.text)}</div>`;
+            return `<div style="${style}">${o.text}</div>`;
         }).join('\n');
 
         // Collect unique fonts from overlays
@@ -131,8 +118,22 @@ export class PainterService {
     }
 
     async renderVideo(videoPath: string, overlays: TextOverlay[]): Promise<Buffer> {
+        // Sanitize all overlay text FIRST to remove emoji/Unicode before any processing
+        const sanitizeText = (text: string) => {
+            return text
+                .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/gu, '') // Remove emoji
+                .replace(/[^\x00-\xFF]/g, '?') // Replace any char > 255 with '?'
+                .trim();
+        };
+
+        // Clean all overlays
+        const cleanedOverlays = overlays.map(o => ({
+            ...o,
+            text: sanitizeText(o.text)
+        }));
+
         const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'painter-'));
-        const overlayImagePath = path.join(workDir, 'overlay.png');
+        const overlayImagePath = path.join(workDir, 'overlay.png'); // This variable is not used after this line.
         const outputPath = path.join(workDir, 'output.mp4');
 
         try {
@@ -176,8 +177,8 @@ export class PainterService {
 
             const imagePaths: { path: string, start: number, end: number }[] = [];
 
-            for (let i = 0; i < overlays.length; i++) {
-                const o = overlays[i];
+            for (let i = 0; i < cleanedOverlays.length; i++) {
+                const o = cleanedOverlays[i];
                 const html = this.generateHtml([o], width, height); // Generate page with JUST this one overlay
                 await page.setContent(html);
                 const imgPath = path.join(workDir, `overlay_${i}.png`);
