@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import { RawFrameAnalysis, RawTextDetection } from '../../types/pipeline';
 import { fontDetectorService } from './font-detector';
 
-const VISION_MODEL_NAME = 'nvidia/nemotron-nano-12b-v2-vl:free';
+const VISION_MODEL_NAME = 'openai/gpt-4o-mini';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // User-provided System Prompt for Vision Phase
