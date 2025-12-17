@@ -149,12 +149,18 @@ export class StructureAnalyzerService {
             return JSON.parse(response) as DesignSystem;
         } catch (err) {
             console.error("Failed to parse design system response, using defaults:", err);
-            // Return sensible defaults
+            // Return sensible defaults matching DesignSystem interface
             return {
                 fonts: { primary: 'Inter', secondary: 'Arial' },
-                colors: { text: '#ffffff', background: '#000000', accent: '#0080ff' },
-                spacing: { base: 8, scale: 1.5 },
-                timing: { default: 3000, hook: 2000, cta: 4000 }
+                colors: {
+                    primary: '#ffffff',
+                    secondary: '#cccccc',
+                    accent: '#0080ff',
+                    background: '#000000',
+                    text: '#ffffff'
+                },
+                spacing: { base: 8, scale: [8, 16, 24, 32, 48] },
+                timing: { avgDurationPerWord: 500, minDuration: 1000 }
             };
         }
     }
